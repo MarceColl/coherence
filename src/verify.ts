@@ -6,7 +6,16 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import type { Config, Graph } from "./types.ts";
-import { CLAIM_FORMS, type ClaimCtx } from "./phrasebook.ts";
+import type { Diagnostic } from "./plugin.ts";
+import { deepFreeze } from "./json.ts";
+import {
+  claimResolutionsFor,
+  claimFormsFor,
+  evaluateResolvedClaim,
+  projectChecksFor,
+  type ClaimCtx,
+  type ResolvedClaim,
+} from "./phrasebook.ts";
 import { ownerOf } from "./walk.ts";
 
 const hashOf = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
@@ -39,6 +48,8 @@ export async function applyVerdicts(cfg: Config, verdictsPath: string): Promise<
 
 export async function runVerify(cfg: Config, graph: Graph, opts: { fast?: boolean; only?: Set<string> }): Promise<number> {
   const root = cfg.root;
+  const extensionGraph = deepFreeze(structuredClone(graph));
+  const extensionConfig = deepFreeze(structuredClone(cfg));
   // Invariants ANCHORED by a `boundary "<name>" ...` claim, per component label. The
   // coverage gate fails any `## invariants` entry that nothing anchors (the ratchet).
   const anchored = new Map<string, Set<string>>();
@@ -50,23 +61,40 @@ export async function runVerify(cfg: Config, graph: Graph, opts: { fast?: boolea
     tc = r.status === 0 ? { pass: true, detail: "" } : { pass: false, detail: tail.slice(0, 200) };
     return tc;
   };
-  type Sig = { kind: "pass" | "fail" | "skip"; claim: string; node: string; detail?: string };
-  // The claim grammar is a declarative registry (src/phrasebook.ts): an ordered list of
-  // ClaimForms, first match wins (the order IS the historical precedence). evalClaim is now
-  // a thin loop — build the per-claim context, find the first matching form, adapt its
-  // ClaimResult into a Sig. A line matching NO form still skips as a dialect gap. The
+  type Sig = {
+    kind: "pass" | "fail" | "skip";
+    claim: string;
+    node: string;
+    detail?: string;
+    diagnosticIds?: readonly string[];
+  };
+  // The graph carries its project-local composed ClaimForm registry and normalized matches.
+  // evalClaim builds the per-claim context and adapts the graph-bound ClaimResult into a Sig.
+  // A line matching NO form still skips as a dialect gap; ambiguity already failed closed
+  // while the graph was bound. The
   // boundary + `conforms to` forms anchor invariants via ctx.anchor so the coverage gate
   // sees them (including boundaries reached transitively through a dictionary word).
-  const evalClaim = async (claim: string, nodeDir: string, node: string): Promise<Sig> => {
+  const evalClaim = async (
+    claim: string,
+    resolved: ResolvedClaim | null,
+    nodeDir: string,
+    node: string,
+  ): Promise<Sig> => {
     const ctx: ClaimCtx = {
-      cfg, graph, root, nodeDir, node, fast: !!opts.fast, typecheck, wordStack: [],
+      cfg: extensionConfig, graph: extensionGraph, root, nodeDir, node, fast: !!opts.fast, typecheck, wordStack: [],
+      forms: claimFormsFor(graph),
       anchor: (inv) => { let set = anchored.get(node); if (!set) { set = new Set(); anchored.set(node, set); } set.add(inv); },
     };
-    for (const form of CLAIM_FORMS) {
-      const m = form.match(claim);
-      if (m) { const r = await form.evaluate(ctx, m); return { kind: r.kind, claim, node, detail: r.detail }; }
-    }
-    return { kind: "skip", claim, node, detail: "no verifier (dialect gap)" };
+    if (!resolved)
+      return { kind: "skip", claim, node, detail: "no verifier (dialect gap)" };
+    const result = await evaluateResolvedClaim(ctx, resolved);
+    return {
+      kind: result.kind,
+      claim,
+      node,
+      detail: result.detail,
+      diagnosticIds: result.diagnosticIds,
+    };
   };
 
   // `only` (verify --staged/--since) scopes the run to the components whose dirs
@@ -80,10 +108,68 @@ export async function runVerify(cfg: Config, graph: Graph, opts: { fast?: boolea
   // staged run doesn't dump every undocumented symbol in the repo as a job.
   const symbols = graph.nodes.filter((n) => n.kind === "symbol" && (!opts.only || (n.path != null && opts.only.has(ownerOf(n.path, compDirs)))));
   const sigs: Sig[] = [];
-  for (const c of comps) { const dir = c.id.slice(2); const diskDir = dir === "." ? root : join(root, dir); for (const cl of c.claims || []) sigs.push(await evalClaim(cl, diskDir, c.label)); }
+  for (const c of comps) {
+    const dir = c.id.slice(2);
+    const diskDir = dir === "." ? root : join(root, dir);
+    const claims = c.claims ?? [];
+    const resolved = claimResolutionsFor(graph, c);
+    for (const [index, claim] of claims.entries())
+      sigs.push(await evalClaim(claim, resolved[index], diskDir, c.label));
+  }
   const red = sigs.filter((s) => s.kind === "fail").length;
   console.log(`claims: ${sigs.length} · ${sigs.filter((s) => s.kind === "pass").length} green · ${red} red · ${sigs.filter((s) => s.kind === "skip").length} skipped`);
   for (const s of sigs) if (s.kind !== "pass") console.log(`  ${s.kind === "fail" ? "✗" : "·"} [${s.node}] ${s.claim}${s.detail ? ` — ${s.detail}` : ""}`);
+
+  const diagnostics = new Map<string, Diagnostic>();
+  for (const [checkIndex, { plugin, check }] of projectChecksFor(graph).entries()) {
+    let emitted: readonly Diagnostic[];
+    try {
+      const value = await check({ root, graph: extensionGraph });
+      if (!Array.isArray(value))
+        throw new Error("project check must return an array of diagnostics");
+      emitted = value;
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      emitted = [{
+        id: `${plugin}:project-check:${checkIndex}:exception`,
+        status: "fail",
+        category: "plugin",
+        message: `Project check failed: ${detail}`,
+      }];
+    }
+    for (const [diagnosticIndex, diagnostic] of emitted.entries()) {
+      const subject = `Plugin "${plugin}" diagnostic at index ${diagnosticIndex}`;
+      if (!diagnostic || typeof diagnostic !== "object")
+        throw new Error(`${subject} must be an object`);
+      if (typeof diagnostic.id !== "string" || !diagnostic.id.startsWith(`${plugin}:`))
+        throw new Error(`${subject}.id must start with "${plugin}:"`);
+      if (!["pass", "fail", "skip"].includes(diagnostic.status))
+        throw new Error(`${subject}.status must be pass, fail, or skip`);
+      if (typeof diagnostic.category !== "string" || !diagnostic.category
+          || typeof diagnostic.message !== "string" || !diagnostic.message)
+        throw new Error(`${subject} category and message must be non-empty strings`);
+      const stable = Object.freeze({
+        id: diagnostic.id,
+        status: diagnostic.status,
+        category: diagnostic.category,
+        message: diagnostic.message,
+      });
+      const previous = diagnostics.get(stable.id);
+      if (previous
+          && (previous.status !== stable.status
+            || previous.category !== stable.category
+            || previous.message !== stable.message))
+        throw new Error(`Conflicting diagnostics share id "${stable.id}"`);
+      diagnostics.set(stable.id, stable);
+    }
+  }
+  if (diagnostics.size) {
+    const values = [...diagnostics.values()];
+    console.log(`diagnostics: ${values.length} · ${values.filter((d) => d.status === "pass").length} green · ${values.filter((d) => d.status === "fail").length} red · ${values.filter((d) => d.status === "skip").length} skipped`);
+    for (const diagnostic of values)
+      if (diagnostic.status !== "pass")
+        console.log(`  ${diagnostic.status === "fail" ? "✗" : "·"} [${diagnostic.id}] ${diagnostic.category} — ${diagnostic.message}`);
+  }
 
   const jobs: Array<Record<string, any>> = [];
   let narr: { statements: any[] } | null = null;
@@ -138,7 +224,17 @@ export async function runVerify(cfg: Config, graph: Graph, opts: { fast?: boolea
     if (authorJobs.length) { console.log(`\n AUTHOR — the WHY (NOT derivable — do not fabricate; needs a human/attested author):`); for (const j of authorJobs) console.log(`   [why] component "${j.name}" — states no rationale`); }
   }
 
-  const failures = red + broken + covGaps;
-  console.log(failures === 0 ? (verifyJobs.length ? `\n• ${verifyJobs.length} verification job(s) pending` : "\n✓ coherent") : `\n✗ ${failures} coherence failure(s) — ${red} claim · ${broken} broken · ${covGaps} coverage`);
+  const failedDiagnosticIds = new Set(
+    [...diagnostics.values()].filter((diagnostic) => diagnostic.status === "fail")
+      .map((diagnostic) => diagnostic.id),
+  );
+  const standaloneClaimFailures = sigs.filter((sig) =>
+    sig.kind === "fail"
+    && !(sig.diagnosticIds ?? []).some((id) => failedDiagnosticIds.has(id))).length;
+  const failures = standaloneClaimFailures + failedDiagnosticIds.size + broken + covGaps;
+  const failureDetail = diagnostics.size
+    ? `${standaloneClaimFailures} claim · ${failedDiagnosticIds.size} diagnostic · ${broken} broken · ${covGaps} coverage`
+    : `${standaloneClaimFailures} claim · ${broken} broken · ${covGaps} coverage`;
+  console.log(failures === 0 ? (verifyJobs.length ? `\n• ${verifyJobs.length} verification job(s) pending` : "\n✓ coherent") : `\n✗ ${failures} coherence failure(s) — ${failureDetail}`);
   return failures === 0 ? 0 : 1;
 }

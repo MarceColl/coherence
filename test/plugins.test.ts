@@ -6,7 +6,11 @@ import { join, relative } from "node:path";
 import { loadConfig } from "../src/config.ts";
 import { buildGraph } from "../src/derive.ts";
 import { loadProject } from "../src/plugins.ts";
-import { graphAtRef, structuralLog, withTreeAt } from "../src/structural.ts";
+import { renderClaude } from "../src/render-claude.ts";
+import { atlas } from "../src/atlas.ts";
+import { conventions } from "../src/conventions.ts";
+import { runVerify } from "../src/verify.ts";
+import { allBoundaries, diffGraphs, graphAtRef, structuralLog, withTreeAt } from "../src/structural.ts";
 import { cleanup, runCaptured, tmpProject } from "./_helpers.ts";
 
 const pluginSource = (name = "fixture") => `
@@ -75,6 +79,40 @@ export default {
       contributeGraph(base) {
         ${body}
       }
+    };
+  }
+};
+`;
+
+const claimPluginSource = (target = "guard") => `
+export default {
+  apiVersion: 1,
+  name: "claims",
+  create() {
+    return {
+      claimForms: [{
+        name: "claims:fixture-boundary",
+        grammar: 'fixture boundary "<invariant>" at <target> via "<oracle>"',
+        example: 'fixture boundary "protected" at guard via "schema"',
+        tier: "hybrid",
+        parse(line) {
+          const match = /^fixture boundary "([^"]+)" at (\\S+) via "([^"]+)"$/.exec(line);
+          return match ? {
+            family: "boundary",
+            key: match[1],
+            anchors: [match[1]],
+            target: match[2],
+            oracle: { kind: "fixture/schema", name: match[3] },
+            data: { source: "fixture" }
+          } : null;
+        },
+        evaluate(context, match) {
+          return context.graph.nodes.some((node) =>
+            node.kind === "symbol" && node.label === match.target)
+            ? { kind: "pass", detail: "fixture boundary held" }
+            : { kind: "fail", detail: "fixture target missing" };
+        }
+      }]
     };
   }
 };
@@ -256,6 +294,51 @@ test("loadProject — unsupported capability keys are fatal", async () => {
   } finally {
     await cleanup(capability);
     await cleanup(adapter);
+  }
+});
+
+test("loadProject — claim/check capability contracts and duplicate form names are fatal", async () => {
+  const invalidForm = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": `export default {
+      apiVersion: 1,
+      name: "invalid",
+      create() { return { claimForms: [{ name: "invalid:form", grammar: "x", example: "x", tier: "deterministic" }] }; }
+    };`,
+  });
+  const invalidChecks = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": `export default {
+      apiVersion: 1,
+      name: "invalid",
+      create() { return { projectChecks: {} }; }
+    };`,
+  });
+  const duplicate = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": `export default {
+      apiVersion: 1,
+      name: "duplicate",
+      create() {
+        return { claimForms: [{
+          name: "typechecks",
+          grammar: "duplicate",
+          example: "duplicate",
+          tier: "deterministic",
+          parse() { return null; },
+          evaluate() { return { kind: "pass" }; }
+        }] };
+      }
+    };`,
+  });
+  try {
+    await assert.rejects(loadProject(invalidForm), /must define parse and evaluate functions/);
+    await assert.rejects(loadProject(invalidChecks), /projectChecks must be an array of functions/);
+    await assert.rejects(loadProject(duplicate), /Duplicate claim form name "typechecks"/);
+  } finally {
+    await cleanup(invalidForm);
+    await cleanup(invalidChecks);
+    await cleanup(duplicate);
   }
 });
 
@@ -579,6 +662,439 @@ test("structuralLog — historical refs use their local plugin facts and strict 
     assert.equal(result.code, 1, result.out);
     assert.match(result.out, /fact "Historical mode" \[history:mode\].*CHANGED — LOSS/);
     assert.match(result.out, /--strict: 1 structural loss/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("plugin claims — one normalized runtime form feeds phrasebook, verify, anchors, ledger, CLAUDE, atlas, and conventions", async () => {
+  const claim = 'fixture boundary "protected" at guard via "schema"';
+  const root = await tmpProject({
+    "coherence.config.json": JSON.stringify({
+      plugins: [{ path: "plugin.ts" }],
+      typecheck: ["true"],
+      sources: ["."],
+      atlas: {
+        charts: { outside: "Outside", inside: "Inside" },
+        transitions: {
+          guard: {
+            from: "outside",
+            to: "inside",
+            translates: "protected",
+          },
+        },
+      },
+    }),
+    "plugin.ts": claimPluginSource(),
+    "system.spec.md": [
+      "# System",
+      "The system.",
+      "",
+      "## works when",
+      `- ${claim}`,
+      "",
+      "## invariants",
+      "- protected",
+      "",
+      "## why",
+      "Protected traffic crosses one declared boundary.",
+    ].join("\n"),
+    "main.ts": [
+      "export function guard() {}",
+      "export function first() { guard(); }",
+      "export function second() { guard(); }",
+    ].join("\n"),
+  });
+  try {
+    const project = await loadProject(root);
+    const graph = await buildGraph(project);
+
+    assert.ok(project.claimForms.some((form) => form.name === "claims:fixture-boundary"));
+    const phrasebook = spawnSync(process.execPath, [join(import.meta.dirname, "..", "src", "cli.ts"), "phrasebook"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    assert.equal(phrasebook.status, 0, phrasebook.stderr);
+    assert.match(phrasebook.stdout, /claims:fixture-boundary/);
+
+    const verified = await runCaptured(() => runVerify(project.config, graph, { fast: true }));
+    assert.equal(verified.code, 0, verified.out);
+    assert.match(verified.out, /1 green · 0 red/);
+    assert.doesNotMatch(verified.out, /not anchored/);
+
+    const boundaries = allBoundaries(graph);
+    assert.equal(boundaries.get("guard")?.inv, "protected");
+    assert.equal(boundaries.get("guard")?.verb, "fixture/schema");
+    assert.match(renderClaude(graph, "stamp"), /protected.*guard.*schema/);
+
+    const atlasResult = await runCaptured(() => atlas(project.config, graph, "check"));
+    assert.equal(atlasResult.code, 0, atlasResult.out);
+    assert.match(atlasResult.out, /no drift/);
+    const conventionResult = await runCaptured(() => conventions(project.config, graph, "report"));
+    assert.equal(conventionResult.code, 0);
+    assert.match(conventionResult.out, /guard\s+2\s+ANCHORED/);
+  } finally {
+    await cleanup(root);
+  }
+
+  const beforeRoot = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": claimPluginSource("guard"),
+    "system.spec.md": `# System\nThe system.\n\n## works when\n- fixture boundary "protected" at guard via "schema"\n`,
+    "main.ts": "export function guard() {}\nexport function nextGuard() {}\n",
+  });
+  const afterRoot = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": claimPluginSource("nextGuard"),
+    "system.spec.md": `# System\nThe system.\n\n## works when\n- fixture boundary "protected" at nextGuard via "schema"\n`,
+    "main.ts": "export function guard() {}\nexport function nextGuard() {}\n",
+  });
+  try {
+    const before = await buildGraph(await loadProject(beforeRoot));
+    const after = await buildGraph(await loadProject(afterRoot));
+    const diff = diffGraphs(before, after);
+    assert.equal(diff.boundaryRewired.length, 1);
+    assert.equal(diff.boundaryRewired[0].before.chokepoint, "guard");
+    assert.equal(diff.boundaryRewired[0].after.chokepoint, "nextGuard");
+  } finally {
+    await cleanup(beforeRoot);
+    await cleanup(afterRoot);
+  }
+});
+
+test("plugin claims — verify reuses the graph-bound normalized match", async () => {
+  const root = await tmpProject({
+    "coherence.config.json": JSON.stringify({
+      plugins: [{ path: "plugin.ts" }],
+      typecheck: ["true"],
+    }),
+    "plugin.ts": `
+      let parses = 0;
+      export default {
+        apiVersion: 1,
+        name: "single-parse",
+        create() {
+          return {
+            claimForms: [{
+              name: "single-parse:boundary",
+              grammar: "single parse",
+              example: "single parse",
+              tier: "deterministic",
+              parse(line) {
+                if (line !== "single parse") return null;
+                parses++;
+                return {
+                  family: "boundary",
+                  key: "stable",
+                  anchors: ["stable"],
+                  target: "guard",
+                  oracle: { kind: "single-parse/check" }
+                };
+              },
+              evaluate(context, match) {
+                const targetExists = context.graph.nodes.some((node) =>
+                  node.kind === "symbol" && node.label === match.target);
+                return {
+                  kind: parses === 1 && targetExists ? "pass" : "fail",
+                  detail: "parsed " + parses + " time(s)"
+                };
+              }
+            }]
+          };
+        }
+      };
+    `,
+    "system.spec.md": [
+      "# System",
+      "The system.",
+      "",
+      "## works when",
+      "- single parse",
+      "",
+      "## invariants",
+      "- stable",
+      "",
+      "## why",
+      "Stable behavior crosses the declared guard.",
+    ].join("\n"),
+    "main.ts": "export function guard() {}\n",
+  });
+  try {
+    const project = await loadProject(root);
+    const result = await runCaptured(async () =>
+      runVerify(project.config, await buildGraph(project), { fast: true }));
+    assert.equal(result.code, 0, result.out);
+    assert.match(result.out, /claims: 1 · 1 green · 0 red/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("plugin contract — frozen inputs are deeply readonly at compile time", async () => {
+  const root = await tmpProject();
+  try {
+    const pluginContract = relative(root, join(process.cwd(), "src", "plugin.ts"))
+      .replaceAll("\\", "/");
+    await writeFile(join(root, "contract.ts"), `
+      import type {
+        ClaimContext,
+        ClaimMatch,
+        PluginInitContext
+      } from ${JSON.stringify(pluginContract)};
+
+      declare const init: PluginInitContext<{ nested: { value: string } }>;
+      // @ts-expect-error initialized plugin options are deeply frozen
+      init.options!.nested.value = "changed";
+
+      declare const tupleInit: PluginInitContext<{ pair: [string, number] }>;
+      const first: string = tupleInit.options!.pair[0];
+
+      declare const context: ClaimContext;
+      // @ts-expect-error claim configuration is deeply frozen
+      context.cfg.ignore.push("dist");
+
+      type DataObject = Exclude<
+        Extract<NonNullable<ClaimMatch["data"]>, object>,
+        readonly unknown[]
+      >;
+      declare const data: DataObject;
+      // @ts-expect-error normalized claim data is deeply frozen
+      data.value = "changed";
+    `);
+    const typed = spawnSync(join(process.cwd(), "node_modules", ".bin", "tsc"), [
+      "--noEmit",
+      "--strict",
+      "--skipLibCheck",
+      "--target", "es2022",
+      "--module", "nodenext",
+      "--moduleResolution", "nodenext",
+      "--allowImportingTsExtensions",
+      join(root, "contract.ts"),
+    ], { cwd: root, encoding: "utf8" });
+    assert.equal(typed.status, 0, typed.stderr || typed.stdout);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("plugin claims — dictionary commitments recurse through the graph's runtime registry", async () => {
+  const root = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": claimPluginSource(),
+    "dictionary/Fixture.md": [
+      "# Fixture",
+      "Uses the fixture boundary.",
+      "",
+      "## commitments",
+      '- fixture boundary "protected" at guard via "schema"',
+    ].join("\n"),
+    "system.spec.md": [
+      "# System",
+      "The system.",
+      "",
+      "## works when",
+      "- conforms to Fixture",
+      "",
+      "## invariants",
+      "- protected",
+      "",
+      "## why",
+      "Protected traffic crosses one declared boundary.",
+    ].join("\n"),
+    "main.ts": "export function guard() {}\n",
+  });
+  try {
+    const project = await loadProject(root);
+    const result = await runCaptured(async () =>
+      runVerify(project.config, await buildGraph(project), { fast: true }));
+    assert.equal(result.code, 0, result.out);
+    assert.doesNotMatch(result.out, /matches no claim form|not anchored/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("structuralLog — each ref uses its local plugin parser for boundary rewiring", async () => {
+  const plugin = (target: string) => `
+    export default {
+      apiVersion: 1,
+      name: "historyclaims",
+      create() {
+        return {
+          claimForms: [{
+            name: "historyclaims:boundary",
+            grammar: "fixture semantic boundary",
+            example: "fixture semantic boundary",
+            tier: "deterministic",
+            parse(line) {
+              return line === "fixture semantic boundary"
+                ? {
+                    family: "boundary",
+                    key: "protected",
+                    anchors: ["protected"],
+                    target: ${JSON.stringify(target)},
+                    oracle: { kind: "fixture/schema" }
+                  }
+                : null;
+            },
+            evaluate() { return { kind: "pass" }; }
+          }]
+        };
+      }
+    };
+  `;
+  const root = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": plugin("guard"),
+    "system.spec.md": "# System\nThe system.\n\n## works when\n- fixture semantic boundary\n",
+    "main.ts": "export function guard() {}\nexport function nextGuard() {}\n",
+  });
+  try {
+    git(root, "init");
+    git(root, "config", "user.email", "coherence@example.test");
+    git(root, "config", "user.name", "Coherence Test");
+    git(root, "add", ".");
+    git(root, "commit", "-m", "old claim parser");
+    const oldRef = git(root, "rev-parse", "HEAD");
+
+    await writeFile(join(root, "plugin.ts"), plugin("nextGuard"));
+    const result = await runCaptured(async () =>
+      structuralLog(await loadConfig(root), oldRef, null, false));
+    assert.equal(result.code, 0, result.out);
+    assert.match(result.out, /boundary "protected".*rewired/);
+    assert.match(result.out, /chokepoint guard → nextGuard/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("plugin claims — ambiguous matches fail closed", async () => {
+  const root = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": `
+      export default {
+        apiVersion: 1,
+        name: "ambiguous",
+        create() {
+          return {
+            claimForms: [{
+              name: "ambiguous:typechecks",
+              grammar: "typechecks",
+              example: "typechecks",
+              tier: "deterministic",
+              parse(line) {
+                return line === "typechecks"
+                  ? { family: "ambiguous", key: "typechecks" }
+                  : null;
+              },
+              evaluate() { return { kind: "pass" }; }
+            }]
+          };
+        }
+      };
+    `,
+    "system.spec.md": "# System\nThe system.\n\n## works when\n- typechecks\n",
+  });
+  try {
+    await assert.rejects(
+      buildGraph(await loadProject(root)),
+      /Claim "typechecks" matches multiple forms: typechecks, ambiguous:typechecks/,
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("project checks — final-graph diagnostics and referenced claim failures count once by stable id", async () => {
+  const root = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": `
+      export default {
+        apiVersion: 1,
+        name: "checks",
+        create() {
+          const diagnostic = ({ graph }) => [{
+            id: "checks:bypass",
+            status: graph.nodes.some((node) => node.id === "checks:model") ? "fail" : "pass",
+            category: "fixture",
+            message: "one bypass"
+          }];
+          return {
+            contributeGraph() {
+              return { nodes: [{ id: "checks:model", label: "Model", kind: "model" }] };
+            },
+            claimForms: [{
+              name: "checks:no-bypass",
+              grammar: "has no bypass",
+              example: "has no bypass",
+              tier: "deterministic",
+              parse(line) {
+                return line === "has no bypass"
+                  ? { family: "checks", key: "no-bypass" }
+                  : null;
+              },
+              evaluate() {
+                return {
+                  kind: "fail",
+                  detail: "bypass diagnostic failed",
+                  diagnosticIds: ["checks:bypass"]
+                };
+              }
+            }],
+            projectChecks: [diagnostic, diagnostic]
+          };
+        }
+      };
+    `,
+    "system.spec.md": [
+      "# System",
+      "The system.",
+      "",
+      "## works when",
+      "- has no bypass",
+      "",
+      "## why",
+      "The project rejects bypasses.",
+    ].join("\n"),
+  });
+  try {
+    const project = await loadProject(root);
+    const result = await runCaptured(async () =>
+      runVerify(project.config, await buildGraph(project), { fast: true }));
+    assert.equal(result.code, 1, result.out);
+    assert.match(result.out, /diagnostics: 1 · 0 green · 1 red · 0 skipped/);
+    assert.match(result.out, /\[checks:bypass\].*one bypass/);
+    assert.match(result.out, /✗ 1 coherence failure\(s\)/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("project checks — diagnostic ids must be namespaced by their plugin", async () => {
+  const root = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": `export default {
+      apiVersion: 1,
+      name: "checks",
+      create() {
+        return {
+          projectChecks: [() => [{
+            id: "unscoped",
+            status: "fail",
+            category: "fixture",
+            message: "bad id"
+          }]]
+        };
+      }
+    };`,
+    "system.spec.md": "# System\nThe system.\n\n## works when\n- unknown dialect\n\n## why\nThe system is checked.\n",
+  });
+  try {
+    const project = await loadProject(root);
+    await assert.rejects(
+      runCaptured(async () => runVerify(project.config, await buildGraph(project), { fast: true })),
+      /diagnostic at index 0\.id must start with "checks:"/,
+    );
   } finally {
     await cleanup(root);
   }

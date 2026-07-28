@@ -24,7 +24,7 @@ import type { Config } from "./types.ts";
 // DELIBERATELY NOT GENERATED (stays authored, outside the fences):
 //   - all the WHY: design-principle essays, conventions, vocabulary, tech-stack notes.
 import type { Graph } from "./types.ts";
-import { parseBoundary } from "./boundary.ts";
+import { boundaryClaims } from "./structural.ts";
 
 export const CLAUDE_BEGIN = "<!-- coherence:begin -->";
 export const CLAUDE_END = "<!-- coherence:end -->";
@@ -37,12 +37,13 @@ export function renderClaude(graph: Graph, stamp: string): string {
   // collect every boundary claim across components for the invariants table
   type Boundary = { comp: string; name: string; chokepoint: string; oracle: string };
   const boundaries: Boundary[] = [];
-  for (const c of comps) {
-    for (const claim of c.claims ?? []) {
-      const b = parseBoundary(claim);
-      if (b) boundaries.push({ comp: c.label, name: b.inv, chokepoint: b.chokepoint, oracle: b.oracle || "—" });
-    }
-  }
+  for (const boundary of boundaryClaims(graph))
+    boundaries.push({
+      comp: boundary.component,
+      name: boundary.inv,
+      chokepoint: boundary.chokepoint,
+      oracle: boundary.oracle || boundary.verb || "—",
+    });
 
   const md: string[] = [];
   md.push(CLAUDE_BEGIN);

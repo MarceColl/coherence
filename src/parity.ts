@@ -14,6 +14,8 @@
 // Unlike boundary's, the `via test` clause is REQUIRED: agreement is a semantic the
 // project must state (what "equal" means between two projections is domain knowledge),
 // so a parity claim without an oracle would be an empty attestation.
+import type { ClaimMatch } from "./plugin.ts";
+
 export const PARITY_RE =
   /^parity\s+"([^"]+)"\s+over\s+(\S+)\s+between\s+(\S+)\s+and\s+(\S+)\s+via test\s+"([^"]+)"$/;
 
@@ -24,4 +26,20 @@ export interface Parity { inv: string; domain: string; f: string; g: string; ora
 export function parseParity(claim: string): Parity | null {
   const m = PARITY_RE.exec(claim);
   return m ? { inv: m[1], domain: m[2], f: m[3], g: m[4], oracle: m[5] } : null;
+}
+
+/** Adapt normalized built-in or plugin semantics into the parity consumer view. */
+export function parityFromMatch(match: ClaimMatch): Parity | null {
+  if (match.family !== "parity" || typeof match.data !== "object"
+      || match.data === null || Array.isArray(match.data)) return null;
+  const { domain, f, g } = match.data as Readonly<Record<string, unknown>>;
+  if (typeof domain !== "string" || typeof f !== "string" || typeof g !== "string")
+    return null;
+  return {
+    inv: match.key,
+    domain,
+    f,
+    g,
+    oracle: match.oracle?.name ?? match.oracle?.kind ?? "",
+  };
 }

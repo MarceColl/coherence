@@ -1,6 +1,6 @@
 // phrasebook.test.ts — the claim grammar-as-data registry. The engine (verify.ts) is now
-// a thin loop over CLAIM_FORMS, so these lock the properties that loop depends on: the
-// ORDER (= precedence, first match wins), that every historical form still matches its
+// a thin resolver over CLAIM_FORMS, so these lock the properties that loop depends on:
+// every historical form still parses its
 // canonical line, and that a line matching nothing is a dialect-gap skip (never red). The
 // `coherence phrasebook` verb renders straight from this registry, so its output must name
 // every form (the README's generated authority).
@@ -8,7 +8,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { CLAIM_FORMS, parseWord, reEscape } from "../src/phrasebook.ts";
 
-test("registry — order IS the historical precedence (typechecks → conforms to)", () => {
+test("registry — preserves the historical built-in display order", () => {
   assert.deepEqual(
     CLAIM_FORMS.map((f) => f.name),
     ["typechecks", "exists", "imports", "responds", "passes test", "boundary", "parity", "conforms to"],
@@ -17,14 +17,14 @@ test("registry — order IS the historical precedence (typechecks → conforms t
 
 test("registry — each form matches its own canonical example line", () => {
   for (const f of CLAIM_FORMS) {
-    const m = f.match(f.example);
+    const m = f.parse(f.example);
     assert.ok(m, `form "${f.name}" should match its own example: ${f.example}`);
   }
 });
 
-test("registry — first match wins: `typechecks` resolves to the typechecks form, not a later one", () => {
-  const first = CLAIM_FORMS.find((f) => f.match("typechecks"));
-  assert.equal(first?.name, "typechecks");
+test("registry — `typechecks` resolves to its normalized stable identity", () => {
+  const parsed = CLAIM_FORMS.find((f) => f.name === "typechecks")?.parse("typechecks");
+  assert.deepEqual(parsed, { family: "typechecks", key: "typechecks" });
 });
 
 test("registry — every canonical claim line matches exactly ONE form (no ambiguous grammar)", () => {
@@ -39,14 +39,14 @@ test("registry — every canonical claim line matches exactly ONE form (no ambig
     "conforms to OwnedScope",
   ];
   for (const l of lines) {
-    const hits = CLAIM_FORMS.filter((f) => f.match(l));
+    const hits = CLAIM_FORMS.filter((f) => f.parse(l));
     assert.equal(hits.length, 1, `"${l}" should match exactly one form, matched: ${hits.map((h) => h.name).join(", ")}`);
   }
 });
 
 test("dialect gap — a line matching no form is recognized by NONE (verify then skips it)", () => {
   const gibberish = "this is prose, not a claim";
-  assert.equal(CLAIM_FORMS.filter((f) => f.match(gibberish)).length, 0);
+  assert.equal(CLAIM_FORMS.filter((f) => f.parse(gibberish)).length, 0);
 });
 
 test("tiers — each form declares one of the four known tiers", () => {
