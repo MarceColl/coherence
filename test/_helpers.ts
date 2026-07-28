@@ -4,7 +4,7 @@
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
-import type { Config, Graph, GraphNode, GraphEdge } from "../src/types.ts";
+import type { Config, Graph, GraphNode, GraphEdge, StructuralFact } from "../src/types.ts";
 
 /** Materialize a throwaway project dir from a {relpath: contents} map. Returns its root. */
 export async function tmpProject(files: Record<string, string> = {}): Promise<string> {
@@ -71,8 +71,16 @@ export function sym(name: string, path = "x.ts"): GraphNode {
   return { id: `s:${path}#${name}`, label: name, kind: "symbol", path, line: 1 };
 }
 
-export function graph(nodes: GraphNode[], edges: GraphEdge[] = []): Graph {
-  return { generatedAt: "", root: "test", absRoot: "/test", nodes, edges, bindings: null };
+export function graph(nodes: GraphNode[], edges: GraphEdge[] = [], facts: StructuralFact[] = []): Graph {
+  return {
+    generatedAt: "",
+    root: "test",
+    absRoot: "/test",
+    nodes,
+    edges,
+    bindings: null,
+    ...(facts.length ? { facts } : {}),
+  };
 }
 
 /** A file graph node owned by component `dir` — what componentMap maps git paths against. */
