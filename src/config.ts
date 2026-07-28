@@ -17,7 +17,22 @@ const DEFAULTS: Omit<Config, "root"> = {
 };
 
 export async function loadConfig(root: string): Promise<Config> {
-  let file: Partial<Config> = {};
-  try { file = JSON.parse(await readFile(join(root, "coherence.config.json"), "utf8")); } catch { /* defaults */ }
+  const path = join(root, "coherence.config.json");
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { ...DEFAULTS, root };
+    throw error;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`Invalid coherence.config.json at ${path}`, { cause });
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+    throw new Error(`Invalid coherence.config.json at ${path}: expected a JSON object`);
+  const file = parsed as Partial<Config>;
   return { ...DEFAULTS, ...file, root };
 }

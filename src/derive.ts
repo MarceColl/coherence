@@ -3,22 +3,21 @@
 // renderer and verify consumes (no second walk anywhere).
 import { readFile } from "node:fs/promises";
 import { join, basename, dirname, relative, resolve } from "node:path";
-import type { Config, Graph, GraphNode, GraphEdge, LanguageAdapter, PlatformAdapter } from "./types.ts";
+import type { ProjectRuntime } from "./plugins.ts";
+import type { Graph, GraphNode, GraphEdge } from "./types.ts";
 import { parseSpec, splitWhy, findSpec, nodeDirs, codeFiles, ownerOf } from "./walk.ts";
-import { typescript } from "./adapters/typescript.ts";
-import { python } from "./adapters/python.ts";
-import { cloudflare } from "./adapters/cloudflare.ts";
 
-const LANGUAGES: Record<string, LanguageAdapter> = { typescript, python };
-const PLATFORMS: Record<string, PlatformAdapter> = { cloudflare };
+const extensionRe = (exts: readonly string[]) =>
+  new RegExp(`\\.(${exts.map((ext) => ext.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})$`);
 
-export async function buildGraph(cfg: Config): Promise<Graph> {
+export async function buildGraph(project: ProjectRuntime): Promise<Graph> {
+  const cfg = project.config;
   const root = cfg.root;
-  const lang = LANGUAGES[cfg.language] ?? typescript;
-  const platform = cfg.platform ? PLATFORMS[cfg.platform] ?? null : null;
+  const lang = project.languages.get(cfg.language)!;
+  const platform = cfg.platform ? project.platforms.get(cfg.platform)! : null;
 
   const ignore = new Set(cfg.ignore);
-  const extRe = new RegExp(`\\.(${cfg.codeExt.join("|")})$`);
+  const extRe = extensionRe(cfg.codeExt);
   const skip = (n: string) =>
     n.startsWith(".") || n === "dev.log" || n === "package-lock.json" ||
     n === "AGENTS.md" || n.endsWith(".spec.md") || /^_.*\.html$/.test(n) || n === "graph.json";
@@ -36,7 +35,7 @@ export async function buildGraph(cfg: Config): Promise<Graph> {
     if (source !== target && !edges.some((e) => e.id === id)) edges.push({ id, source, target, kind });
   };
   const compId = (d: string) => `c:${d}`;
-  const langExt = new RegExp(`\\.(${lang.exts.join("|")})$`);
+  const langExt = extensionRe(lang.exts);
 
   // components (spec nodes)
   const classToDir: Record<string, string> = {};

@@ -4,8 +4,14 @@
   "description": "A spec + coherence harness for agent-developed projects: derive a multi-resolution graph from *.spec.md + code, render an explorable outline and an agent map, and verify claims/narrative/coverage. Language and platform specifics live behind adapters.",
   "type": "module",
   "bin": { "coherence": "dist/cli.js" },
+  "exports": {
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js"
+    }
+  },
   "files": ["dist", "README.md"],
-  "engines": { "node": ">=22" },
+  "engines": { "node": ">=22.18.0" },
   "scripts": {
     "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
     "test": "node --test \"test/**/*.test.ts\"",

@@ -41,8 +41,14 @@ export interface PlatformAdapter {
   bindings(root: string): Promise<Bindings | null>;
 }
 
+export interface PluginDeclaration {
+  path: string;
+  options?: unknown;
+}
+
 export interface Config {
   root: string;
+  plugins?: PluginDeclaration[];
   outputDir: string;        // where generated html/json artifacts go (e.g. "public")
   entryDir: string;         // the entrypoint component's dir, "." = root
   tooling: string[];        // path prefixes demoted to a "tooling" group
