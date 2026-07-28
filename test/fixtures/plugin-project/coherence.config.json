@@ -1,0 +1,16 @@
+{
+  "plugins": [
+    {
+      "path": "plugin.ts",
+      "options": {
+        "marker": "fixture-marker"
+      }
+    }
+  ],
+  "outputDir": "artifacts",
+  "codeExt": ["fixture"],
+  "typecheck": ["true"],
+  "test": [],
+  "language": "fixture",
+  "platform": "fixture"
+}

@@ -83,6 +83,12 @@ Full (every field the `Config` interface in `src/types.ts` accepts; defaults fro
 
 ```json
 {
+  "plugins": [
+    {
+      "path": ".coherence/plugins/project.ts",
+      "options": { "snapshot": ".coherence/project-snapshot.json" }
+    }
+  ],
   "outputDir": "docs/coherence",
   "entryDir": ".",
   "tooling": ["scripts"],
@@ -112,6 +118,7 @@ Full (every field the `Config` interface in `src/types.ts` accepts; defaults fro
 
 | Field | Default | Purpose |
 | --- | --- | --- |
+| `plugins` | `[]` | Explicit repository-local plugin declarations. Each entry is `{ path, options? }`; `path` is relative to the project root. See “Repository-local plugins.” |
 | `outputDir` | `"public"` | Where generated artifacts go (`graph.json`, `_graph.html`, `_overview.html`, ratchet baselines). |
 | `entryDir` | `"."` | The entrypoint component's dir (`.` = root). |
 | `tooling` | `[]` | Path prefixes demoted to a "tooling" group in the graph. |
@@ -140,6 +147,88 @@ Then author `*.spec.md` files (a folder containing one is a *node*). A spec is
 `## invariants` list, and an optional `## why` (protected rationale). Claims are a
 grammar, not prose — the parser (`src/walk.ts`) strips markdown-formatter escapes
 (`\_` → `_`) so a prettified spec still parses.
+
+## Repository-local plugins
+
+Plugins are explicitly configured, versioned repository code. Coherence never scans for
+or auto-discovers them:
+
+```json
+{
+  "plugins": [
+    {
+      "path": ".coherence/plugins/project.ts",
+      "options": { "snapshot": ".coherence/project-snapshot.json" }
+    }
+  ]
+}
+```
+
+The path must resolve, through symlinks, to a file inside the project root. Loading that
+file executes it with the same permissions as Coherence, so a configured plugin is
+**trusted code**: review it as you would a build script. Missing files, path escapes,
+invalid exports, duplicate plugin names or registry keys, unsupported API versions, and
+initialization failures are fatal.
+
+Author against the type-only public subpath; no runtime helper import is required:
+
+```ts
+import type { CoherencePluginModule } from "coherence-harness/plugin";
+
+interface Options {
+  snapshot: string;
+}
+
+const plugin: CoherencePluginModule<Options> = {
+  apiVersion: 1,
+  name: "project",
+  create(context) {
+    return {
+      adapters: {
+        languages: { /* key: LanguageAdapter */ },
+        platforms: { /* key: PlatformAdapter */ },
+      },
+      contributeGraph(base) {
+        return { nodes: [], edges: [], facts: [] };
+      },
+      claimForms: [],
+      projectChecks: [],
+      commands: {
+        sync(context, args) {
+          return args.includes("--check") ? 0 : undefined;
+        },
+      },
+    };
+  },
+};
+
+export default plugin;
+```
+
+`apiVersion: 1` is mandatory. The capabilities are independent and optional:
+
+| Capability | Contract |
+| --- | --- |
+| `adapters.languages` | Adds named `LanguageAdapter`s (`exts`, symbol/import/doc parsing). Built-ins cannot be replaced. |
+| `adapters.platforms` | Adds named `PlatformAdapter`s for infrastructure bindings. Built-ins cannot be replaced. |
+| `contributeGraph(base)` | Receives one deeply frozen, complete base graph. Returns namespaced nodes, edges, and atomic structural facts; all fragments are validated before their deterministic union is published. Contributors never see peer fragments. |
+| `claimForms` | Adds pure parsers from claim text to normalized `family + key`, anchors, target, oracle, and JSON data, plus evaluators. Zero matches remains a dialect-gap skip; multiple matches are fatal ambiguity. |
+| `projectChecks` | Runs after the final graph exists and returns standard diagnostics. Diagnostic IDs must begin with `<plugin-name>:` and duplicate failure IDs are counted once. |
+| `commands` | Maps command names to explicit maintenance operations invoked as `coherence plugin <plugin-name> <command> [...args]`. The handler receives the same frozen `{ root, options }` initialization context and an exact, read-only copy of the raw arguments. |
+
+Plugin loading is atomic per CLI invocation: Coherence resolves and validates all modules,
+initializes all capabilities into temporary registries, and publishes one project runtime
+only when the complete set is valid. There is no global registration, and plugin commands
+never run as a side effect of `graph`, `verify`, or another command. A command may return
+`undefined` (normalized to exit 0) or an integer from 0 through 255; thrown errors and
+invalid results become a nonzero core-managed exit after output is flushed.
+
+`coherence log` rebuilds each side inside a detached Git worktree and loads that ref's own
+configuration and plugin module. V1 plugins must therefore be committed and
+self-contained: use Node built-ins and committed project modules only, with no dependency
+on the live checkout's `node_modules` or generated uncommitted state. Normalize external
+tool output into committed snapshots when historical comparison depends on it. The generic
+end-to-end example at `test/fixtures/plugin-project` exercises every capability.
 
 ## The claim phrasebook (the `## works when` grammar)
 
@@ -464,6 +553,9 @@ Two warnings:
 
 ## Commands
 
+- `coherence plugin <plugin-name> <command> [...args]` — run one explicitly configured,
+  namespaced plugin operation. Arguments after the command are passed unchanged; an
+  unknown plugin or command exits nonzero.
 - `coherence phrasebook` — print the claim-form table (name, grammar, tier, example)
   from the current project's composed built-in + plugin registry. The generated authority
   behind the phrasebook table above.

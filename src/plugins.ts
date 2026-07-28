@@ -14,6 +14,7 @@ import type {
   CoherencePluginModule,
   GraphFragment,
   PluginCapabilities,
+  PluginInitContext,
   ProjectCheck,
   ReadonlyGraph,
 } from "./plugin.ts";
@@ -34,6 +35,7 @@ const BUILTIN_PLATFORMS = { cloudflare } satisfies Record<string, PlatformAdapte
 export interface LoadedPlugin {
   readonly name: string;
   readonly path: string;
+  readonly context: PluginInitContext;
   readonly capabilities: PluginCapabilities;
 }
 
@@ -72,7 +74,8 @@ async function pluginPath(root: string, declaration: PluginDeclaration, index: n
 }
 
 function pluginModule(value: unknown, path: string): CoherencePluginModule {
-  if (!isRecord(value) || typeof value.name !== "string" || !value.name || typeof value.create !== "function")
+  if (!isRecord(value) || typeof value.name !== "string" || !value.name
+      || /\s/.test(value.name) || typeof value.create !== "function")
     throw new Error(`Plugin at ${path} has an invalid default export`);
   if (value.apiVersion !== 1)
     throw new Error(`Plugin "${value.name}" has unsupported apiVersion ${String(value.apiVersion)}; expected 1`);
@@ -106,7 +109,7 @@ function pluginCapabilities(value: unknown, plugin: string): asserts value is Pl
     throw new Error(`Plugin "${plugin}" initialization returned invalid capabilities`);
   for (const key of Object.keys(value))
     if (key !== "adapters" && key !== "contributeGraph"
-        && key !== "claimForms" && key !== "projectChecks")
+        && key !== "claimForms" && key !== "projectChecks" && key !== "commands")
       throw new Error(`Plugin "${plugin}" returned unsupported capability "${key}"`);
   if (value.contributeGraph !== undefined && typeof value.contributeGraph !== "function")
     throw new Error(`Plugin "${plugin}" contributeGraph must be a function`);
@@ -125,6 +128,24 @@ function pluginCapabilities(value: unknown, plugin: string): asserts value is Pl
     if (!Array.isArray(value.projectChecks)
         || !value.projectChecks.every((check) => typeof check === "function"))
       throw new Error(`Plugin "${plugin}" projectChecks must be an array of functions`);
+  }
+  if (value.commands !== undefined) {
+    if (!isRecord(value.commands)
+        || ![Object.prototype, null].includes(Object.getPrototypeOf(value.commands)))
+      throw new Error(`Plugin "${plugin}" commands must be a record`);
+    for (const key of Reflect.ownKeys(value.commands)) {
+      if (typeof key !== "string")
+        throw new Error(`Plugin "${plugin}" command names must be strings`);
+      const descriptor = Object.getOwnPropertyDescriptor(value.commands, key)!;
+      if (!descriptor.enumerable || !Object.hasOwn(descriptor, "value"))
+        throw new Error(`Plugin "${plugin}" commands must use enumerable data properties`);
+      const name = key;
+      const command = descriptor.value;
+      if (!name || /\s/.test(name))
+        throw new Error(`Plugin "${plugin}" command names must be non-empty and contain no whitespace`);
+      if (typeof command !== "function")
+        throw new Error(`Plugin "${plugin}" command "${name}" must be a function`);
+    }
   }
 }
 
@@ -323,12 +344,15 @@ export async function loadProject(root: string): Promise<ProjectRuntime> {
 
   const loaded: LoadedPlugin[] = [];
   for (const entry of modules) {
+    const context = deepFreeze({
+      root: projectRoot,
+      options: entry.declaration.options === undefined
+        ? undefined
+        : structuredClone(entry.declaration.options),
+    }) as PluginInitContext;
     let capabilities: unknown;
     try {
-      capabilities = await entry.module.create({
-        root: projectRoot,
-        options: entry.declaration.options,
-      });
+      capabilities = await entry.module.create(context);
     } catch (cause) {
       const detail = cause instanceof Error ? cause.message : String(cause);
       throw new Error(`Plugin "${entry.module.name}" initialization failed: ${detail}`, { cause });
@@ -337,7 +361,8 @@ export async function loadProject(root: string): Promise<ProjectRuntime> {
     loaded.push(Object.freeze({
       name: entry.module.name,
       path: entry.path,
-      capabilities,
+      context,
+      capabilities: deepFreeze(capabilities),
     }));
   }
 
@@ -379,4 +404,45 @@ export async function loadProject(root: string): Promise<ProjectRuntime> {
     claimForms: Object.freeze(claimForms),
     projectChecks: Object.freeze(projectChecks),
   });
+}
+
+export interface PluginCommandExecution {
+  readonly exitCode: number;
+  readonly error?: string;
+}
+
+/** Resolve and run one explicitly requested plugin operation. No graph is constructed. */
+export async function executePluginCommand(
+  project: ProjectRuntime,
+  pluginName: string,
+  commandName: string,
+  args: readonly string[],
+): Promise<PluginCommandExecution> {
+  const plugin = project.plugins.find(({ name }) => name === pluginName);
+  if (!plugin)
+    return { exitCode: 2, error: `Unknown plugin "${pluginName}"` };
+  const commands = plugin.capabilities.commands;
+  const command = commands && Object.hasOwn(commands, commandName)
+    ? commands[commandName]
+    : undefined;
+  if (!command)
+    return { exitCode: 2, error: `Plugin "${pluginName}" has no command "${commandName}"` };
+
+  let result: number | void;
+  try {
+    result = await command(plugin.context, Object.freeze([...args]));
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    return {
+      exitCode: 1,
+      error: `Plugin "${pluginName}" command "${commandName}" failed: ${detail}`,
+    };
+  }
+  if (result === undefined) return { exitCode: 0 };
+  if (!Number.isInteger(result) || result < 0 || result > 255)
+    return {
+      exitCode: 1,
+      error: `Plugin "${pluginName}" command "${commandName}" returned invalid exit code ${String(result)}`,
+    };
+  return { exitCode: result };
 }
