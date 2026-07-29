@@ -481,13 +481,14 @@ Two warnings:
   run to the components whose dirs changed — fast edit-loop reconciliation of just what
   you touched (claims + boundary anchoring + coverage), instead of the whole tree.
 - `coherence log [<refA> [<refB>]]` — the **temporal ledger**: the structural diff of
-  the invariant/boundary set between two refs (default `HEAD` → working tree). The graph
-  is a snapshot; this is the transaction view — which `## invariants` and `boundary`
-  claims were **added**, **removed**, or **rewired** (chokepoint or oracle changed),
-  per component, by building the graph at each ref in a throwaway git worktree. Answers
+  the claim and plugin-fact set between two refs (default `HEAD` → working tree). The
+  graph is a snapshot; this is the transaction view — which `## invariants`, boundary
+  or parity claims, and generic plugin facts were **added**, **removed**, **changed**, or
+  **rewired**, by building the graph at each ref in a throwaway git worktree. Answers
   "did my change alter what's enforced?" without re-reading the world. `--strict` exits
-  nonzero on a **loss** (a removed invariant/boundary/parity/component) so a PR can't
-  silently drop a guard the way a prose review misses it.
+  nonzero on a **loss** (a removed invariant/boundary/parity/component or a plugin fact
+  removal/change carrying the corresponding loss policy) so a PR can't silently drop a
+  guard the way a prose review misses it.
   After the ledger it prints the **NOVELTY vs ANCHORS advisory** — the pressure the
   ledger alone lacks: a large feature can land with ZERO ledger change and read
   "no structural change" while shipping a pile of unanchored surface. The advisory

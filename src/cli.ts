@@ -164,7 +164,7 @@ if (cmd === "graph") {
   }
   await exit(await runVerify(cfg, graph, { fast, only }));
 } else if (cmd === "log") {
-  // The temporal ledger: what did refA → refB do to the invariant/boundary set.
+  // The temporal ledger: what did refA → refB do to the structural contract.
   await exit(await structuralLog(cfg, positional[0] ?? "HEAD", positional[1] ?? null, strict));
 } else if (cmd === "onboard") {
   await onboard(cfg, await buildGraph(project));
@@ -208,7 +208,7 @@ if (cmd === "graph") {
 } else {
   console.error("usage: coherence <graph|overview|docs|claude|verify|log|decompose|drift|scaffold|onboard|lint-sinks|conventions|atlas|contracts|why-lint|phrasebook> [options]");
   console.error("  verify [--fast] [--staged | --since <ref>]   scope to changed components");
-  console.error("  log [<refA> [<refB>]] [--strict]             structural diff of the invariant/boundary set");
+  console.error("  log [<refA> [<refB>]] [--strict]             structural diff of claims and plugin facts");
   console.error("  scaffold <boundary|component|invariant|parity> <name>");
   console.error("  lint-sinks | conventions [--check | --update-baseline]   ratchets (baseline in <outputDir>)");
   console.error("  atlas [--check]   trust-manifold render + drift gate     why-lint [--check]   ## why prose lint");

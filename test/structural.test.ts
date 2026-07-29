@@ -1,7 +1,7 @@
 // structural.test.ts — the temporal ledger that powers `coherence log [--strict]`. Its
-// whole job is to make a LOSS loud: a dropped invariant, a removed boundary anchor, or a
-// silently-rewired chokepoint is exactly the diff a prose review misses. diffGraphs is the
-// pure core; renderDiff returns the loss count that --strict turns into a nonzero exit.
+// whole job is to make a LOSS loud: a dropped invariant, removed anchor, or policy-marked
+// fact change is exactly the diff a prose review misses. diffGraphs is the pure core;
+// renderDiff returns the loss count that --strict turns into a nonzero exit.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { diffGraphs, renderDiff, allBoundaries, affectedComponents } from "../src/structural.ts";
@@ -149,4 +149,53 @@ test("diffGraphs — a reprojected parity (different f/g or domain) is rewired, 
   assert.equal(d.parityRewired.length, 1);
   assert.equal(d.parityRewired[0].before.g, "messageProvenance");
   assert.equal(d.parityRewired[0].after.g, "history");
+});
+
+test("diffGraphs — plugin facts are added, removed, and changed by stable id", () => {
+  const before = graph([], [], [
+    { id: "warehouse:kept", label: "Kept", value: { mode: "view" } },
+    { id: "warehouse:removed", label: "Removed", value: 1 },
+    { id: "warehouse:changed", label: "Changed", value: { mode: "view" } },
+  ]);
+  const after = graph([], [], [
+    { id: "warehouse:kept", label: "Kept", value: { mode: "view" } },
+    { id: "warehouse:changed", label: "Changed", value: { mode: "table" } },
+    { id: "warehouse:added", label: "Added", value: true },
+  ]);
+
+  const d = diffGraphs(before, after);
+  assert.deepEqual(d.factAdded.map((fact) => fact.id), ["warehouse:added"]);
+  assert.deepEqual(d.factRemoved.map((fact) => fact.id), ["warehouse:removed"]);
+  assert.deepEqual(d.factChanged.map((change) => change.id), ["warehouse:changed"]);
+});
+
+test("diffGraphs — fact object key order is not a structural change", () => {
+  const before = graph([], [], [{
+    id: "warehouse:shape",
+    label: "Shape",
+    value: { alpha: 1, nested: { beta: 2, gamma: 3 } },
+  }]);
+  const after = graph([], [], [{
+    id: "warehouse:shape",
+    label: "Shape",
+    value: { nested: { gamma: 3, beta: 2 }, alpha: 1 },
+  }]);
+  const d = diffGraphs(before, after);
+  assert.equal(d.factChanged.length, 0);
+});
+
+test("renderDiff — fact loss policy controls strict loss counting", async () => {
+  const guarded = graph([], [], [
+    { id: "warehouse:removed", label: "Removed", policy: { removal: "loss" } },
+    { id: "warehouse:changed", label: "Changed", value: "old", policy: { change: "loss" } },
+    { id: "warehouse:informational", label: "Informational" },
+  ]);
+  const after = graph([], [], [
+    { id: "warehouse:changed", label: "Changed", value: "new", policy: { change: "loss" } },
+  ]);
+  const rendered = await runCaptured(async () => renderDiff(diffGraphs(guarded, after), "A", "B"));
+  assert.equal(rendered.code, 2);
+  assert.match(rendered.out, /fact "Removed".*REMOVED — LOSS/);
+  assert.match(rendered.out, /fact "Changed".*CHANGED — LOSS/);
+  assert.match(rendered.out, /fact "Informational".*REMOVED/);
 });

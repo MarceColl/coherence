@@ -2,14 +2,36 @@
 // The core is platform- and language-agnostic; everything project-specific lives
 // behind LanguageAdapter (how to read code) and PlatformAdapter (how to read infra).
 
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 export interface GraphNode {
   id: string; parent?: string; label: string; kind: string;
   sub?: string; path?: string; line?: number; claimed?: boolean; claims?: string[];
   invariants?: string[]; // named properties the component upholds (## invariants); each anchored by a `boundary` claim
   prose?: string; // the WHAT — derivable from code, regenerable
   why?: string;   // the WHY — rationale/intent, authored + protected
+  data?: Record<string, JsonValue>; // namespaced plugin-owned metadata
 }
-export interface GraphEdge { id: string; source: string; target: string; kind: string; }
+export interface GraphEdge {
+  id: string; source: string; target: string; kind: string;
+  data?: Record<string, JsonValue>; // namespaced plugin-owned metadata
+}
+
+export interface StructuralFact {
+  id: string;
+  label: string;
+  value?: JsonValue;
+  policy?: {
+    removal?: "loss";
+    change?: "loss";
+  };
+}
 
 export interface Bindings {
   /** runtime entities that map to a code component (e.g. a Durable Object class). */
@@ -22,6 +44,7 @@ export interface Bindings {
 export interface Graph {
   generatedAt: string; root: string; absRoot: string;
   nodes: GraphNode[]; edges: GraphEdge[]; bindings: Bindings | null;
+  facts?: StructuralFact[];
 }
 
 /** A raw spec parsed from a *.spec.md file. */

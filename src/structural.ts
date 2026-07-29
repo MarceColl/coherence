@@ -1,14 +1,14 @@
 // structural.ts — the temporal affordance. A coherence graph is a *snapshot*
 // ledger; this adds the transaction view: what one ref → another did to the
-// STRUCTURE an agent cares about — components, the invariants they uphold, and
-// the boundary claims (chokepoint + oracle) that anchor those invariants.
+// STRUCTURE an agent cares about — components, the invariants they uphold, the
+// claims that anchor them, and generic facts contributed by repository plugins.
 //
-// The point is the question "did my change alter the invariant set?" — answerable
+// The point is the question "did my change alter the structural contract?" — answerable
 // without re-reading the world, and a review gate: a dropped boundary or a
 // silently-rewired chokepoint is the diff a prose review misses. `--strict` turns
-// a LOSS (an invariant or boundary anchor removed) into a nonzero exit.
+// a core loss or a plugin-policy loss into a nonzero exit.
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseBoundary, type Boundary } from "./boundary.ts";
@@ -18,7 +18,7 @@ import { loadProject } from "./plugins.ts";
 import { ownerOf } from "./walk.ts";
 import { CONFORMS_RE, dictionaryDir, parseWord } from "./phrasebook.ts";
 import { noveltyVerdict, renderNovelty, scanSurface, surfaceSignals } from "./novelty.ts";
-import type { Config, Graph, GraphNode } from "./types.ts";
+import type { Config, Graph, GraphNode, StructuralFact } from "./types.ts";
 
 /** Files changed vs `since` (a ref), or — when null — the working tree vs HEAD
  *  PLUS untracked files. Paths are relative to cfg.root (`--relative`). This is the
@@ -190,8 +190,12 @@ export async function withTreeAt<T>(cfg: Config, ref: string | null, fn: (projRo
   if (!ref) return fn(cfg.root);
   const top = git(["rev-parse", "--show-toplevel"], cfg.root);
   if (top.status !== 0) throw new Error(`not a git repo at ${cfg.root}: ${(top.stderr || "").trim()}`);
-  const repoRoot = top.stdout.trim();
-  const relProject = relative(repoRoot, resolve(cfg.root));
+  // Normalize both sides before computing the project offset: macOS temp paths
+  // commonly mix /var with its /private/var realpath, which would otherwise make
+  // relative() escape the detached worktree and silently read the live checkout.
+  const repoRoot = await realpath(top.stdout.trim());
+  const projectRoot = await realpath(resolve(cfg.root));
+  const relProject = relative(repoRoot, projectRoot);
   const tmp = await mkdtemp(join(tmpdir(), "coherence-wt-"));
   // A detached worktree at <ref> gives us that ref's COMMITTED files (untracked /
   // gitignored paths like node_modules are absent — buildGraph only needs source +
@@ -225,7 +229,30 @@ export interface StructuralDiff {
   parityAdded: Array<{ comp: string; p: Parity }>;
   parityRemoved: Array<{ comp: string; p: Parity }>;
   parityRewired: Array<{ comp: string; inv: string; before: Parity; after: Parity }>;
+  factAdded: StructuralFact[];
+  factRemoved: StructuralFact[];
+  factChanged: Array<{ id: string; before: StructuralFact; after: StructuralFact }>;
   claimDelta: Array<{ comp: string; added: number; removed: number }>;
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.entries(value)
+    .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+    .join(",")}}`;
+}
+
+function factSignature(fact: StructuralFact): string {
+  const hasValue = Object.hasOwn(fact, "value");
+  return canonicalJson({
+    label: fact.label,
+    hasValue,
+    value: hasValue && fact.value !== undefined ? fact.value : null,
+    removal: fact.policy?.removal ?? null,
+    change: fact.policy?.change ?? null,
+  });
 }
 
 export function diffGraphs(before: Graph, after: Graph): StructuralDiff {
@@ -234,6 +261,7 @@ export function diffGraphs(before: Graph, after: Graph): StructuralDiff {
     componentsAdded: [], componentsRemoved: [], invAdded: [], invRemoved: [],
     boundaryAdded: [], boundaryRemoved: [], boundaryRewired: [],
     parityAdded: [], parityRemoved: [], parityRewired: [], claimDelta: [],
+    factAdded: [], factRemoved: [], factChanged: [],
   };
   for (const label of B.keys()) if (!A.has(label)) d.componentsAdded.push(label);
   for (const label of A.keys()) if (!B.has(label)) d.componentsRemoved.push(label);
@@ -263,16 +291,30 @@ export function diffGraphs(before: Graph, after: Graph): StructuralDiff {
     for (const c of a.claims) if (!b.claims.has(c)) removed++;
     if (added || removed) d.claimDelta.push({ comp: label, added, removed });
   }
+
+  const beforeFacts = new Map((before.facts ?? []).map((fact) => [fact.id, fact]));
+  const afterFacts = new Map((after.facts ?? []).map((fact) => [fact.id, fact]));
+  for (const fact of after.facts ?? []) {
+    const previous = beforeFacts.get(fact.id);
+    if (!previous) d.factAdded.push(fact);
+    else if (factSignature(previous) !== factSignature(fact))
+      d.factChanged.push({ id: fact.id, before: previous, after: fact });
+  }
+  for (const fact of before.facts ?? [])
+    if (!afterFacts.has(fact.id)) d.factRemoved.push(fact);
   return d;
 }
 
 const fmtB = (b: Boundary) => `"${b.inv}" at ${b.chokepoint}${b.oracle ? ` via ${b.verb} "${b.oracle}"` : ""}`;
 const fmtP = (p: Parity) => `"${p.inv}" over ${p.domain} between ${p.f} and ${p.g} via test "${p.oracle}"`;
 
-/** Render the diff; return the count of LOSSES (removed invariants/boundaries/parities/components). */
+/** Render the diff; return the losses that `--strict` gates on. */
 export function renderDiff(d: StructuralDiff, fromLabel: string, toLabel: string): number {
   console.log(`\n  STRUCTURAL LEDGER — ${fromLabel} → ${toLabel}\n`);
-  const losses = d.componentsRemoved.length + d.invRemoved.length + d.boundaryRemoved.length + d.parityRemoved.length;
+  const coreLosses = d.componentsRemoved.length + d.invRemoved.length + d.boundaryRemoved.length + d.parityRemoved.length;
+  const factLosses = d.factRemoved.filter((fact) => fact.policy?.removal === "loss").length
+    + d.factChanged.filter(({ before }) => before.policy?.change === "loss").length;
+  const losses = coreLosses + factLosses;
   const line = (mark: string, s: string) => console.log(`  ${mark} ${s}`);
 
   if (d.componentsAdded.length) for (const c of d.componentsAdded) line("+", `component ${c}`);
@@ -302,15 +344,23 @@ export function renderDiff(d: StructuralDiff, fromLabel: string, toLabel: string
     for (const s of [dm, fg, or].filter(Boolean)) console.log(`      ${s}`);
   }
 
+  for (const fact of d.factAdded)
+    line("+", `fact "${fact.label}" [${fact.id}]`);
+  for (const fact of d.factRemoved)
+    line("–", `fact "${fact.label}" [${fact.id}]  (REMOVED${fact.policy?.removal === "loss" ? " — LOSS" : ""})`);
+  for (const fact of d.factChanged)
+    line("~", `fact "${fact.after.label}" [${fact.id}]  (CHANGED${fact.before.policy?.change === "loss" ? " — LOSS" : ""})`);
+
   if (d.claimDelta.length) {
     const tot = d.claimDelta.reduce((n, c) => n + c.added + c.removed, 0);
     console.log(`\n  (${tot} non-boundary claim change(s) across ${d.claimDelta.length} component(s): ${d.claimDelta.map((c) => `${c.comp} +${c.added}/-${c.removed}`).join(", ")})`);
   }
 
-  const changed = losses + d.componentsAdded.length + d.invAdded.length + d.boundaryAdded.length + d.boundaryRewired.length
-    + d.parityAdded.length + d.parityRewired.length;
+  const changed = coreLosses + d.componentsAdded.length + d.invAdded.length + d.boundaryAdded.length + d.boundaryRewired.length
+    + d.parityAdded.length + d.parityRewired.length
+    + d.factAdded.length + d.factRemoved.length + d.factChanged.length;
   if (!changed && !d.claimDelta.length) console.log("  no structural change.");
-  console.log(`\n  ${changed} structural change(s) · ${losses} loss(es) (removed invariant/boundary/parity/component)`);
+  console.log(`\n  ${changed} structural change(s) · ${losses} loss(es)`);
   return losses;
 }
 
@@ -368,7 +418,7 @@ export async function structuralLog(cfg: Config, refA: string, refB: string | nu
   renderNovelty(sig, noveltyVerdict(sig, cfg.novelty));
 
   if (strict && losses) {
-    console.log(`\n  ✗ --strict: ${losses} structural loss(es) — a dropped invariant/boundary must be intentional.`);
+    console.log(`\n  ✗ --strict: ${losses} structural loss(es) — every loss must be intentional.`);
     return 1;
   }
   return 0;

@@ -3,7 +3,7 @@
 // renderer and verify consumes (no second walk anywhere).
 import { readFile } from "node:fs/promises";
 import { join, basename, dirname, relative, resolve } from "node:path";
-import type { ProjectRuntime } from "./plugins.ts";
+import { composePluginGraph, type ProjectRuntime } from "./plugins.ts";
 import type { Graph, GraphNode, GraphEdge } from "./types.ts";
 import { parseSpec, splitWhy, findSpec, nodeDirs, codeFiles, ownerOf } from "./walk.ts";
 
@@ -78,5 +78,6 @@ export async function buildGraph(project: ProjectRuntime): Promise<Graph> {
     for (const m of src.matchAll(/fetch\(\s*["']https?:\/\/([^"'/]+)/g)) { const id = `x:host:${m[1]}`; add({ id, label: m[1], kind: "external", sub: "service" }); link(fileIds.get(f)!, id, "calls"); }
   }
 
-  return { generatedAt: new Date().toISOString().slice(0, 16).replace("T", " ") + "Z", root: basename(resolve(root)), absRoot: resolve(root), nodes, edges, bindings };
+  const base = { generatedAt: new Date().toISOString().slice(0, 16).replace("T", " ") + "Z", root: basename(resolve(root)), absRoot: resolve(root), nodes, edges, bindings };
+  return composePluginGraph(project, base);
 }

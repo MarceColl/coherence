@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { symlink, writeFile } from "node:fs/promises";
+import { readFile, symlink, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { loadConfig } from "../src/config.ts";
 import { buildGraph } from "../src/derive.ts";
 import { loadProject } from "../src/plugins.ts";
-import { graphAtRef } from "../src/structural.ts";
-import { cleanup, tmpProject } from "./_helpers.ts";
+import { graphAtRef, structuralLog, withTreeAt } from "../src/structural.ts";
+import { cleanup, runCaptured, tmpProject } from "./_helpers.ts";
 
 const pluginSource = (name = "fixture") => `
 export default {
@@ -66,6 +66,20 @@ export default {
 };
 `;
 
+const fragmentPluginSource = (name: string, body: string) => `
+export default {
+  apiVersion: 1,
+  name: ${JSON.stringify(name)},
+  create() {
+    return {
+      contributeGraph(base) {
+        ${body}
+      }
+    };
+  }
+};
+`;
+
 const git = (root: string, ...args: string[]) => {
   const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
@@ -117,6 +131,7 @@ test("loadProject — no-plugin projects retain the built-in graph behavior", as
     assert.ok(project.languages.has("python"));
     assert.ok(project.platforms.has("cloudflare"));
     assert.ok(graph.nodes.some((node) => node.id === "s:main.ts#builtIn"));
+    assert.deepEqual(Object.keys(graph).sort(), ["absRoot", "bindings", "edges", "generatedAt", "nodes", "root"]);
   } finally {
     await cleanup(root);
   }
@@ -345,6 +360,225 @@ test("graphAtRef — historical graphs load the plugin module from that ref", as
     assert.ok(oldGraph.nodes.some((node) => node.id === "s:main.plug#oldSymbol"));
     assert.ok(!oldGraph.nodes.some((node) => node.id === "s:main.plug#newSymbol"));
     assert.ok(liveGraph.nodes.some((node) => node.id === "s:main.plug#newSymbol"));
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("buildGraph — contributors see one frozen base graph and merge deterministically", async () => {
+  const root = await tmpProject({
+    "coherence.config.json": JSON.stringify({
+      plugins: [{ path: "alpha.ts" }, { path: "beta.ts" }],
+    }),
+    "alpha.ts": fragmentPluginSource("alpha", `
+      const complete = base.nodes.some((node) => node.id === "s:main.ts#builtIn");
+      let mutationBlocked = false;
+      try { base.nodes.push({ id: "alpha:mutated" }); } catch { mutationBlocked = true; }
+      return {
+        nodes: [{
+          id: "alpha:model",
+          label: "Alpha model",
+          kind: "model",
+          data: { complete, mutationBlocked }
+        }],
+        edges: [{
+          id: "alpha:contains",
+          source: "c:.",
+          target: "alpha:model",
+          kind: "contains",
+          data: { role: "model" }
+        }],
+        facts: [{
+          id: "alpha:materialization",
+          label: "Alpha materialization",
+          value: { mode: "table" },
+          policy: { change: "loss" }
+        }]
+      };
+    `),
+    "beta.ts": fragmentPluginSource("beta", `
+      if (base.nodes.some((node) => node.id === "alpha:model"))
+        throw new Error("contributors observed another fragment");
+      return {
+        nodes: [{ id: "beta:model", label: "Beta model", kind: "model" }]
+      };
+    `),
+    "system.spec.md": "# System\nThe system.",
+    "main.ts": "export function builtIn() {}\n",
+  });
+  try {
+    const graph = await buildGraph(await loadProject(root));
+    const alpha = graph.nodes.find((node) => node.id === "alpha:model");
+    assert.deepEqual(alpha?.data, { complete: true, mutationBlocked: true });
+    assert.deepEqual(
+      graph.nodes.filter((node) => node.id.endsWith(":model")).map((node) => node.id),
+      ["alpha:model", "beta:model"],
+    );
+    assert.deepEqual(graph.edges.find((edge) => edge.id === "alpha:contains")?.data, { role: "model" });
+    assert.deepEqual(graph.facts, [{
+      id: "alpha:materialization",
+      label: "Alpha materialization",
+      value: { mode: "table" },
+      policy: { change: "loss" },
+    }]);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("buildGraph — invalid fragments fail before any contributed graph is published", async () => {
+  const cases: Array<{ name: string; body: string; error: RegExp }> = [
+    {
+      name: "unscoped",
+      body: `return { nodes: [{ id: "model", label: "Model", kind: "model" }] };`,
+      error: /node id "model" must start with "unscoped:"/,
+    },
+    {
+      name: "unscopededge",
+      body: `return { edges: [{
+        id: "edge", source: "c:.", target: "c:.", kind: "loops"
+      }] };`,
+      error: /edge id "edge" must start with "unscopededge:"/,
+    },
+    {
+      name: "unscopedfact",
+      body: `return { facts: [{ id: "fact", label: "Fact" }] };`,
+      error: /structural fact id "fact" must start with "unscopedfact:"/,
+    },
+    {
+      name: "replacement",
+      body: `return { nodes: [{ id: "c:.", label: "Replacement", kind: "component" }] };`,
+      error: /cannot replace or duplicate base node "c:\."/,
+    },
+    {
+      name: "duplicate",
+      body: `return { nodes: [
+        { id: "duplicate:model", label: "One", kind: "model" },
+        { id: "duplicate:model", label: "Two", kind: "model" }
+      ] };`,
+      error: /cannot replace or duplicate node "duplicate:model"/,
+    },
+    {
+      name: "duplicateedge",
+      body: `return {
+        nodes: [{ id: "duplicateedge:model", label: "Model", kind: "model" }],
+        edges: [
+          { id: "duplicateedge:edge", source: "c:.", target: "duplicateedge:model", kind: "contains" },
+          { id: "duplicateedge:edge", source: "c:.", target: "duplicateedge:model", kind: "contains" }
+        ]
+      };`,
+      error: /Duplicate graph edge id "duplicateedge:edge"/,
+    },
+    {
+      name: "duplicatefact",
+      body: `return { facts: [
+        { id: "duplicatefact:fact", label: "One" },
+        { id: "duplicatefact:fact", label: "Two" }
+      ] };`,
+      error: /Duplicate structural fact id "duplicatefact:fact"/,
+    },
+    {
+      name: "dangling",
+      body: `return { edges: [{
+        id: "dangling:edge", source: "c:.", target: "dangling:missing", kind: "contains"
+      }] };`,
+      error: /dangling target "dangling:missing"/,
+    },
+    {
+      name: "self",
+      body: `return {
+        nodes: [{ id: "self:model", label: "Model", kind: "model" }],
+        edges: [{ id: "self:edge", source: "self:model", target: "self:model", kind: "loops" }]
+      };`,
+      error: /cannot be a self-edge/,
+    },
+    {
+      name: "function",
+      body: `return {
+        nodes: [{ id: "function:model", label: "Model", kind: "model", data: { bad() {} } }]
+      };`,
+      error: /data\.bad must be JSON-serializable/,
+    },
+    {
+      name: "cycle",
+      body: `const data = {}; data.self = data; return {
+        facts: [{ id: "cycle:fact", label: "Cyclic", value: data }]
+      };`,
+      error: /value\.self must not contain cycles/,
+    },
+  ];
+
+  for (const fixture of cases) {
+    const root = await tmpProject({
+      "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+      "plugin.ts": fragmentPluginSource(fixture.name, fixture.body),
+      "system.spec.md": "# System\nThe system.",
+    });
+    try {
+      await assert.rejects(buildGraph(await loadProject(root)), fixture.error, fixture.name);
+    } finally {
+      await cleanup(root);
+    }
+  }
+});
+
+test("buildGraph — endpoints may target the complete union of peer fragments", async () => {
+  const root = await tmpProject({
+    "coherence.config.json": JSON.stringify({
+      plugins: [{ path: "linker.ts" }, { path: "target.ts" }],
+    }),
+    "linker.ts": fragmentPluginSource("linker", `return {
+      edges: [{
+        id: "linker:peer", source: "c:.", target: "target:model", kind: "contains"
+      }]
+    };`),
+    "target.ts": fragmentPluginSource("target", `return {
+      nodes: [{ id: "target:model", label: "Target", kind: "model" }]
+    };`),
+    "system.spec.md": "# System\nThe system.",
+  });
+  try {
+    const graph = await buildGraph(await loadProject(root));
+    assert.equal(graph.edges.at(-1)?.target, "target:model");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("structuralLog — historical refs use their local plugin facts and strict loss policy", async () => {
+  const plugin = (mode: string) => fragmentPluginSource("history", `return {
+    facts: [{
+      id: "history:mode",
+      label: "Historical mode",
+      value: { mode: ${JSON.stringify(mode)} },
+      policy: { change: "loss" }
+    }]
+  };`);
+  const root = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": plugin("view"),
+    "system.spec.md": "# System\nThe system.",
+  });
+  try {
+    git(root, "init");
+    git(root, "config", "user.email", "coherence@example.test");
+    git(root, "config", "user.name", "Coherence Test");
+    git(root, "add", ".");
+    git(root, "commit", "-m", "view fact");
+    const oldRef = git(root, "rev-parse", "HEAD");
+
+    await writeFile(join(root, "plugin.ts"), plugin("table"));
+    assert.match(git(root, "show", `${oldRef}:plugin.ts`), /mode: "view"/);
+    const config = await loadConfig(root);
+    assert.match(await withTreeAt(config, oldRef, (at) => readFile(join(at, "plugin.ts"), "utf8")), /mode: "view"/);
+    assert.deepEqual((await graphAtRef(config, oldRef)).facts?.[0].value, { mode: "view" });
+    assert.deepEqual((await graphAtRef(config, null)).facts?.[0].value, { mode: "table" });
+    const result = await runCaptured(async () =>
+      structuralLog(config, oldRef, null, true));
+
+    assert.equal(result.code, 1, result.out);
+    assert.match(result.out, /fact "Historical mode" \[history:mode\].*CHANGED — LOSS/);
+    assert.match(result.out, /--strict: 1 structural loss/);
   } finally {
     await cleanup(root);
   }
