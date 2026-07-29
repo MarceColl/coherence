@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFile, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { loadConfig } from "../src/config.ts";
 import { buildGraph } from "../src/derive.ts";
@@ -282,14 +282,14 @@ test("loadProject — invalid exports and API versions are fatal", async () => {
 test("loadProject — unsupported capability keys are fatal", async () => {
   const capability = await tmpProject({
     "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
-    "plugin.ts": "export default { apiVersion: 1, name: 'future', create() { return { commands: {} }; } };\n",
+    "plugin.ts": "export default { apiVersion: 1, name: 'future', create() { return { commandz: {} }; } };\n",
   });
   const adapter = await tmpProject({
     "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
     "plugin.ts": "export default { apiVersion: 1, name: 'typo', create() { return { adapters: { language: {} } }; } };\n",
   });
   try {
-    await assert.rejects(loadProject(capability), /unsupported capability "commands"/);
+    await assert.rejects(loadProject(capability), /unsupported capability "commandz"/);
     await assert.rejects(loadProject(adapter), /unsupported adapter capability "language"/);
   } finally {
     await cleanup(capability);
@@ -297,7 +297,7 @@ test("loadProject — unsupported capability keys are fatal", async () => {
   }
 });
 
-test("loadProject — claim/check capability contracts and duplicate form names are fatal", async () => {
+test("loadProject — claim/check/command contracts and duplicate form names are fatal", async () => {
   const invalidForm = await tmpProject({
     "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
     "plugin.ts": `export default {
@@ -331,14 +331,38 @@ test("loadProject — claim/check capability contracts and duplicate form names 
       }
     };`,
   });
+  const invalidCommands = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": `export default {
+      apiVersion: 1,
+      name: "invalid",
+      create() { return { commands: { sync: 1 } }; }
+    };`,
+  });
+  const accessorCommand = await tmpProject({
+    "coherence.config.json": JSON.stringify({ plugins: [{ path: "plugin.ts" }] }),
+    "plugin.ts": `export default {
+      apiVersion: 1,
+      name: "invalid",
+      create() {
+        const commands = {};
+        Object.defineProperty(commands, "sync", { enumerable: true, get() { return () => {}; } });
+        return { commands };
+      }
+    };`,
+  });
   try {
     await assert.rejects(loadProject(invalidForm), /must define parse and evaluate functions/);
     await assert.rejects(loadProject(invalidChecks), /projectChecks must be an array of functions/);
     await assert.rejects(loadProject(duplicate), /Duplicate claim form name "typechecks"/);
+    await assert.rejects(loadProject(invalidCommands), /command "sync" must be a function/);
+    await assert.rejects(loadProject(accessorCommand), /commands must use enumerable data properties/);
   } finally {
     await cleanup(invalidForm);
     await cleanup(invalidChecks);
     await cleanup(duplicate);
+    await cleanup(invalidCommands);
+    await cleanup(accessorCommand);
   }
 });
 
@@ -1095,6 +1119,142 @@ test("project checks — diagnostic ids must be namespaced by their plugin", asy
       runCaptured(async () => runVerify(project.config, await buildGraph(project), { fast: true })),
       /diagnostic at index 0\.id must start with "checks:"/,
     );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("plugin fixture — actual CLI composes every capability and runs commands only on demand", async () => {
+  const parent = await tmpProject();
+  const root = join(parent, "project");
+  const fixture = join(process.cwd(), "test", "fixtures", "plugin-project");
+  const cli = join(process.cwd(), "src", "cli.ts");
+  const run = (...args: string[]) =>
+    spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: "utf8" });
+  const receiptPath = join(root, "command-receipt.json");
+  try {
+    await cp(fixture, root, { recursive: true });
+
+    const graphRun = run("graph");
+    assert.equal(graphRun.status, 0, graphRun.stderr);
+    await assert.rejects(readFile(receiptPath, "utf8"), /ENOENT/);
+    const graph = JSON.parse(await readFile(join(root, "artifacts", "graph.json"), "utf8"));
+    assert.ok(graph.nodes.some((node: { id: string }) => node.id === "s:main.fixture#adapterSymbol"));
+    assert.ok(graph.nodes.some((node: { id: string }) => node.id === "i:FIXTURE_STORE"));
+    assert.ok(graph.nodes.some((node: { id: string }) => node.id === "fixture:guard"));
+    assert.ok(graph.edges.some((edge: { id: string }) => edge.id === "fixture:guards"));
+    assert.ok(graph.facts.some((fact: { id: string }) => fact.id === "fixture:mode"));
+
+    const verifyRun = run("verify");
+    assert.equal(verifyRun.status, 0, verifyRun.stderr);
+    assert.match(verifyRun.stdout, /claims: 1 · 1 green/);
+    assert.match(verifyRun.stdout, /diagnostics: 1 · 1 green/);
+    assert.match(verifyRun.stdout, /✓ coherent/);
+    await assert.rejects(readFile(receiptPath, "utf8"), /ENOENT/);
+
+    const phrasebookRun = run("phrasebook");
+    assert.equal(phrasebookRun.status, 0, phrasebookRun.stderr);
+    assert.match(phrasebookRun.stdout, /fixture:boundary/);
+
+    const commandRun = run("plugin", "fixture", "inspect", "alpha", "--check", "omega");
+    assert.equal(commandRun.status, 0, commandRun.stderr);
+    assert.match(commandRun.stdout, /fixture command args: \["alpha","--check","omega"\]/);
+    assert.deepEqual(JSON.parse(await readFile(receiptPath, "utf8")), {
+      root: await realpath(root),
+      marker: "fixture-marker",
+      args: ["alpha", "--check", "omega"],
+    });
+
+    const nonzeroRun = run("plugin", "fixture", "inspect", "--fail");
+    assert.equal(nonzeroRun.status, 7, nonzeroRun.stderr);
+
+    const unknownPlugin = run("plugin", "missing", "inspect");
+    assert.equal(unknownPlugin.status, 2);
+    assert.match(unknownPlugin.stderr, /Unknown plugin "missing"/);
+
+    const unknownCommand = run("plugin", "fixture", "missing");
+    assert.equal(unknownCommand.status, 2);
+    assert.match(unknownCommand.stderr, /Plugin "fixture" has no command "missing"/);
+
+    const inheritedCommand = run("plugin", "fixture", "toString");
+    assert.equal(inheritedCommand.status, 2);
+    assert.match(inheritedCommand.stderr, /Plugin "fixture" has no command "toString"/);
+  } finally {
+    await cleanup(parent);
+  }
+});
+
+test("package — packed public declarations type-check a consuming repository plugin", async () => {
+  const root = await tmpProject();
+  const packageRoot = process.cwd();
+  const cache = join(root, "npm-cache");
+  const env = { ...process.env, npm_config_cache: cache };
+  try {
+    const packed = spawnSync(
+      "npm",
+      ["pack", "--json", "--pack-destination", root],
+      { cwd: packageRoot, encoding: "utf8", env },
+    );
+    assert.equal(packed.status, 0, packed.stderr);
+    const jsonStart = packed.stdout.indexOf("[");
+    assert.notEqual(jsonStart, -1, packed.stdout);
+    const metadata = JSON.parse(packed.stdout.slice(jsonStart))[0];
+    assert.ok(metadata.files.some((file: { path: string }) => file.path === "dist/plugin.d.ts"));
+
+    const consumer = join(root, "consumer");
+    await mkdir(consumer);
+    await writeFile(join(consumer, "package.json"), JSON.stringify({
+      name: "plugin-consumer",
+      private: true,
+      type: "module",
+    }));
+    await writeFile(join(consumer, "tsconfig.json"), JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        noEmit: true,
+        target: "es2022",
+        module: "nodenext",
+        moduleResolution: "nodenext",
+        skipLibCheck: true,
+      },
+      include: ["plugin.ts"],
+    }));
+    await writeFile(join(consumer, "plugin.ts"), `
+import type { CoherencePluginModule } from "coherence-harness/plugin";
+
+interface Options { marker: string }
+
+const plugin: CoherencePluginModule<Options> = {
+  apiVersion: 1,
+  name: "consumer",
+  create() {
+    return {
+      commands: {
+        inspect(context, args) {
+          const marker: string | undefined = context.options?.marker;
+          const first: string | undefined = args[0];
+          return marker && first ? 0 : undefined;
+        }
+      }
+    };
+  }
+};
+
+export default plugin;
+`);
+    const tarball = join(root, metadata.filename);
+    const installed = spawnSync(
+      "npm",
+      ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball],
+      { cwd: consumer, encoding: "utf8", env },
+    );
+    assert.equal(installed.status, 0, installed.stderr);
+    const typed = spawnSync(
+      join(packageRoot, "node_modules", ".bin", "tsc"),
+      ["-p", "tsconfig.json"],
+      { cwd: consumer, encoding: "utf8" },
+    );
+    assert.equal(typed.status, 0, typed.stderr || typed.stdout);
   } finally {
     await cleanup(root);
   }

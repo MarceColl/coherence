@@ -5,7 +5,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { buildGraph } from "./derive.ts";
-import { loadProject } from "./plugins.ts";
+import { executePluginCommand, loadProject } from "./plugins.ts";
 import { renderOutline } from "./render-outline.ts";
 import { renderOverview } from "./render-overview.ts";
 import { renderClaude, spliceBlock, extractBlock, resolveClaudeMdPath, CLAUDE_BEGIN, CLAUDE_END } from "./render-claude.ts";
@@ -33,14 +33,15 @@ const sinceIdx = argv.indexOf("--since");
 const since = sinceIdx >= 0 ? argv[sinceIdx + 1] : null;
 const positional = argv.filter((a, i) => !a.startsWith("--") && argv[i - 1] !== "--since" && argv[i - 1] !== "--apply");
 
-// Exit AFTER stdout has drained. `process.exit()` terminates the process before
-// asynchronously-buffered writes flush when stdout is a pipe or file (it only
-// writes synchronously to a TTY) — so `coherence verify > file`, `| cat`, or any
-// CI capture silently lost the entire report AND surfaced a spurious nonzero exit
-// from the interrupted write. Writing an empty chunk and awaiting its callback
-// guarantees the buffer flushed before we exit, identically in every stdout mode.
+// Exit AFTER output has drained. `process.exit()` terminates the process before
+// asynchronously-buffered writes flush when stdout/stderr is a pipe or file — so
+// reports or plugin errors can be truncated in CI capture. Writing an empty chunk to
+// both streams and awaiting their callbacks guarantees they flush before core owns exit.
 const exit = async (code: number): Promise<never> => {
-  await new Promise<void>((res) => process.stdout.write("", () => res()));
+  await Promise.all([
+    new Promise<void>((res) => process.stdout.write("", () => res())),
+    new Promise<void>((res) => process.stderr.write("", () => res())),
+  ]);
   process.exit(code);
 };
 
@@ -205,13 +206,24 @@ if (cmd === "graph") {
     console.log(`    example: ${f.example}`);
   }
   await exit(0);
+} else if (cmd === "plugin") {
+  const pluginName = argv[0];
+  const commandName = argv[1];
+  if (!pluginName || !commandName) {
+    console.error("usage: coherence plugin <plugin-name> <command> [...args]");
+    await exit(2);
+  }
+  const result = await executePluginCommand(project, pluginName, commandName, argv.slice(2));
+  if (result.error) console.error(result.error);
+  await exit(result.exitCode);
 } else {
-  console.error("usage: coherence <graph|overview|docs|claude|verify|log|decompose|drift|scaffold|onboard|lint-sinks|conventions|atlas|contracts|why-lint|phrasebook> [options]");
+  console.error("usage: coherence <graph|overview|docs|claude|verify|log|decompose|drift|scaffold|onboard|lint-sinks|conventions|atlas|contracts|why-lint|phrasebook|plugin> [options]");
   console.error("  verify [--fast] [--staged | --since <ref>]   scope to changed components");
   console.error("  log [<refA> [<refB>]] [--strict]             structural diff of claims and plugin facts");
   console.error("  scaffold <boundary|component|invariant|parity> <name>");
   console.error("  lint-sinks | conventions [--check | --update-baseline]   ratchets (baseline in <outputDir>)");
   console.error("  atlas [--check]   trust-manifold render + drift gate     why-lint [--check]   ## why prose lint");
   console.error("  contracts [--check]   producer/consumer contracts across deploy artifacts + uncovered-surface detector");
+  console.error("  plugin <plugin-name> <command> [...args]   run one explicitly configured plugin operation");
   await exit(2);
 }

@@ -105,7 +105,14 @@ export interface PluginInitContext<Options = unknown> {
   readonly options: DeepReadonly<Options> | undefined;
 }
 
-export interface PluginCapabilities {
+export type PluginCommandResult = number | void;
+
+export type PluginCommand<Options = unknown> = (
+  context: PluginInitContext<Options>,
+  args: readonly string[],
+) => PluginCommandResult | Promise<PluginCommandResult>;
+
+export interface PluginCapabilities<Options = unknown> {
   readonly adapters?: {
     readonly languages?: Readonly<Record<string, LanguageAdapter>>;
     readonly platforms?: Readonly<Record<string, PlatformAdapter>>;
@@ -113,10 +120,13 @@ export interface PluginCapabilities {
   readonly contributeGraph?: GraphContributor;
   readonly claimForms?: readonly ClaimForm[];
   readonly projectChecks?: readonly ProjectCheck[];
+  readonly commands?: Readonly<Record<string, PluginCommand<Options>>>;
 }
 
 export interface CoherencePluginModule<Options = unknown> {
   readonly apiVersion: 1;
   readonly name: string;
-  create(context: PluginInitContext<Options>): PluginCapabilities | Promise<PluginCapabilities>;
+  create(
+    context: PluginInitContext<Options>,
+  ): PluginCapabilities<Options> | Promise<PluginCapabilities<Options>>;
 }
