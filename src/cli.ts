@@ -4,8 +4,8 @@
 // It loads coherence.config.json from the cwd and operates on that project.
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { loadConfig } from "./config.ts";
 import { buildGraph } from "./derive.ts";
+import { loadProject } from "./plugins.ts";
 import { renderOutline } from "./render-outline.ts";
 import { renderOverview } from "./render-overview.ts";
 import { renderClaude, spliceBlock, extractBlock, resolveClaudeMdPath, CLAUDE_BEGIN, CLAUDE_END } from "./render-claude.ts";
@@ -44,7 +44,8 @@ const exit = async (code: number): Promise<never> => {
   process.exit(code);
 };
 
-const cfg = await loadConfig(process.cwd());
+const project = await loadProject(process.cwd());
+const cfg = project.config;
 const stamp = new Date().toISOString().slice(0, 16).replace("T", " ") + "Z";
 const out = (p: string) => join(cfg.root, cfg.outputDir, p);
 const normStamp = (s: string) => s.replace(/<span id="stamp">[^<]*<\/span>/, '<span id="stamp"></span>');
@@ -66,7 +67,7 @@ const read = (p: string) => readFile(p, "utf8").catch(() => "");
 async function writeOutputs() { await mkdir(join(cfg.root, cfg.outputDir), { recursive: true }); }
 
 async function doGraph(): Promise<string[]> {
-  const graph = await buildGraph(cfg);
+  const graph = await buildGraph(project);
   const json = JSON.stringify(graph, null, 2);
   const html = renderOutline(graph, cfg, stamp);
   if (check) {
@@ -93,7 +94,7 @@ async function doGraph(): Promise<string[]> {
 }
 
 async function doOverview(): Promise<string[]> {
-  const graph = await buildGraph(cfg);
+  const graph = await buildGraph(project);
   const { html, md } = renderOverview(graph, stamp, await loadDictionary(cfg, graph));
   if (check) {
     const stale: string[] = [];
@@ -109,7 +110,7 @@ async function doOverview(): Promise<string[]> {
 }
 
 async function doClaude(): Promise<string[]> {
-  const graph = await buildGraph(cfg);
+  const graph = await buildGraph(project);
   const block = renderClaude(graph, stamp);
   // The authored CLAUDE.md may live OUTSIDE cfg.root (e.g. a repo root above a
   // sub-package). resolveClaudeMdPath honors cfg.claudeMdPath when set.
@@ -151,7 +152,7 @@ if (cmd === "graph") {
   if (check) { console.log(stale.length ? `stale: ${stale.join(", ")}` : "CLAUDE.md current"); await exit(stale.length ? 1 : 0); }
 } else if (cmd === "verify") {
   if (applyPath) await exit(await applyVerdicts(cfg, applyPath));
-  const graph = await buildGraph(cfg);
+  const graph = await buildGraph(project);
   // Edit-loop scoping: --staged (working changes vs HEAD + untracked) or --since <ref>
   // restricts verify to the components whose dirs changed — fast reconciliation of just
   // what you touched, instead of the whole tree.
@@ -166,11 +167,11 @@ if (cmd === "graph") {
   // The temporal ledger: what did refA → refB do to the invariant/boundary set.
   await exit(await structuralLog(cfg, positional[0] ?? "HEAD", positional[1] ?? null, strict));
 } else if (cmd === "onboard") {
-  await onboard(cfg, await buildGraph(cfg));
+  await onboard(cfg, await buildGraph(project));
 } else if (cmd === "decompose") {
-  await exit(await decompose(cfg, await buildGraph(cfg)));
+  await exit(await decompose(cfg, await buildGraph(project)));
 } else if (cmd === "drift") {
-  await exit(await drift(cfg, await buildGraph(cfg)));
+  await exit(await drift(cfg, await buildGraph(project)));
 } else if (cmd === "scaffold") {
   await exit(await scaffold(cfg, positional[0], positional[1]));
 } else if (cmd === "lint-sinks") {
@@ -181,17 +182,17 @@ if (cmd === "graph") {
 } else if (cmd === "conventions") {
   // Guard-vs-contract detector + growth ratchet. Reuses the graph's boundary claims.
   const mode = argv.includes("--update-baseline") ? "update" : check ? "check" : "report";
-  await exit(await conventions(cfg, await buildGraph(cfg), mode));
+  await exit(await conventions(cfg, await buildGraph(project), mode));
 } else if (cmd === "atlas") {
   // Trust-graded manifold; tiers derived from boundary claims, charts/crossings from config.
-  await exit(await atlas(cfg, await buildGraph(cfg), check ? "check" : "render"));
+  await exit(await atlas(cfg, await buildGraph(project), check ? "check" : "render"));
 } else if (cmd === "contracts") {
   // Producer/consumer contracts across deploy artifacts + the uncovered cross-artifact
   // surface detector. Charts analog: artifacts/contracts are config data, mechanism here.
-  await exit(await contracts(cfg, await buildGraph(cfg), check ? "check" : "render"));
+  await exit(await contracts(cfg, await buildGraph(project), check ? "check" : "render"));
 } else if (cmd === "why-lint") {
   // Advisory: ## why prose restating a mechanism a boundary claim already anchors.
-  await exit(whyLint(await buildGraph(cfg), check ? "check" : "report"));
+  await exit(whyLint(await buildGraph(project), check ? "check" : "report"));
 } else if (cmd === "phrasebook") {
   // The claim grammar, rendered straight from the CLAIM_FORMS registry — the generated
   // authority behind the README's hand-kept table. A line matching no form is SKIPPED

@@ -13,8 +13,8 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseBoundary, type Boundary } from "./boundary.ts";
 import { parseParity, type Parity } from "./parity.ts";
-import { loadConfig } from "./config.ts";
 import { buildGraph } from "./derive.ts";
+import { loadProject } from "./plugins.ts";
 import { ownerOf } from "./walk.ts";
 import { CONFORMS_RE, dictionaryDir, parseWord } from "./phrasebook.ts";
 import { noveltyVerdict, renderNovelty, scanSurface, surfaceSignals } from "./novelty.ts";
@@ -211,7 +211,7 @@ export async function withTreeAt<T>(cfg: Config, ref: string | null, fn: (projRo
 
 /** Build the graph as it exists at a git ref (null = the live working tree). */
 export async function graphAtRef(cfg: Config, ref: string | null): Promise<Graph> {
-  return withTreeAt(cfg, ref, async (root) => buildGraph(await loadConfig(root)));
+  return withTreeAt(cfg, ref, async (root) => buildGraph(await loadProject(root)));
 }
 
 export interface StructuralDiff {
@@ -350,7 +350,7 @@ export async function structuralLog(cfg: Config, refA: string, refB: string | nu
   // same tree (the novelty surface proxies need the file contents at each ref).
   const changed = changedBetween(cfg, refA, refB);
   const at = (ref: string | null) => withTreeAt(cfg, ref, async (root) => ({
-    graph: await buildGraph(await loadConfig(root)),
+    graph: await buildGraph(await loadProject(root)),
     surface: await scanSurface(root, changed),
   }));
   const before = await at(refA);
