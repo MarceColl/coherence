@@ -194,12 +194,12 @@ if (cmd === "graph") {
   // Advisory: ## why prose restating a mechanism a boundary claim already anchors.
   await exit(whyLint(await buildGraph(project), check ? "check" : "report"));
 } else if (cmd === "phrasebook") {
-  // The claim grammar, rendered straight from the CLAIM_FORMS registry — the generated
+  // The claim grammar, rendered from the project runtime's composed registry — the generated
   // authority behind the README's hand-kept table. A line matching no form is SKIPPED
   // (dialect gap), never red — so a typo'd verb is a silent no-op; check verify's skipped count.
   console.log("The claim phrasebook — the `## works when` grammar (src/phrasebook.ts).");
-  console.log("First match wins; the order below is the precedence. A line matching none is skipped (dialect gap).\n");
-  for (const f of CLAIM_FORMS) {
+  console.log("A line matching none is skipped (dialect gap); multiple matches are rejected as ambiguous.\n");
+  for (const f of project.claimForms) {
     console.log(`● ${f.name}  [${f.tier}]`);
     console.log(`    grammar: ${f.grammar}`);
     console.log(`    example: ${f.example}`);

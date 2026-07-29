@@ -26,7 +26,9 @@ import { readFile } from "node:fs/promises";
 import { readdir } from "node:fs/promises";
 import { join, relative, basename } from "node:path";
 import ts from "typescript";
-import type { Config } from "./types.ts";
+interface RootConfig {
+  readonly root: string;
+}
 
 export type OracleVerdict = "live" | "literal" | "no-iteration" | "not-found";
 
@@ -59,7 +61,7 @@ const isTestFile = (name: string) =>
 const NOISE_DIRS = new Set(["node_modules", ".git", "dist", "build", "out", ".turbo", ".wrangler", ".next", "coverage", ".coherence"]);
 
 /** Locate candidate test files under root, skipping only true build/VCS noise. */
-async function findTestFiles(cfg: Config): Promise<string[]> {
+async function findTestFiles(cfg: RootConfig): Promise<string[]> {
   const ignore = NOISE_DIRS;
   const out: string[] = [];
   async function visit(dir: string) {
@@ -388,7 +390,7 @@ export interface ParityAnalysis {
 }
 
 export async function analyzeParityOracle(
-  cfg: Config, oracleName: string, domain: string, f: string, g: string,
+  cfg: RootConfig, oracleName: string, domain: string, f: string, g: string,
 ): Promise<ParityAnalysis> {
   const files = await findTestFiles(cfg);
   for (const rel of files) {
@@ -433,7 +435,7 @@ export async function analyzeParityOracle(
   return { verdict: "not-found", detail: `no describe("${oracleName}") found in any test file` };
 }
 
-export async function analyzeOracle(cfg: Config, oracleName: string): Promise<OracleAnalysis> {
+export async function analyzeOracle(cfg: RootConfig, oracleName: string): Promise<OracleAnalysis> {
   const files = await findTestFiles(cfg);
   for (const rel of files) {
     let src: string;

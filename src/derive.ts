@@ -4,6 +4,7 @@
 import { readFile } from "node:fs/promises";
 import { join, basename, dirname, relative, resolve } from "node:path";
 import { composePluginGraph, type ProjectRuntime } from "./plugins.ts";
+import { bindClaimRuntime } from "./phrasebook.ts";
 import type { Graph, GraphNode, GraphEdge } from "./types.ts";
 import { parseSpec, splitWhy, findSpec, nodeDirs, codeFiles, ownerOf } from "./walk.ts";
 
@@ -79,5 +80,9 @@ export async function buildGraph(project: ProjectRuntime): Promise<Graph> {
   }
 
   const base = { generatedAt: new Date().toISOString().slice(0, 16).replace("T", " ") + "Z", root: basename(resolve(root)), absRoot: resolve(root), nodes, edges, bindings };
-  return composePluginGraph(project, base);
+  return bindClaimRuntime(
+    await composePluginGraph(project, base),
+    project.claimForms,
+    project.projectChecks,
+  );
 }

@@ -143,17 +143,17 @@ grammar, not prose — the parser (`src/walk.ts`) strips markdown-formatter esca
 
 ## The claim phrasebook (the `## works when` grammar)
 
-The claim grammar is a declarative registry — `CLAIM_FORMS` in `src/phrasebook.ts`,
-an ordered list of forms where **first match wins** (the order IS the precedence).
-`evalClaim` (`src/verify.ts`) is a thin loop over it. **A line matching none of these
-is SKIPPED** (`no verifier (dialect gap)`) — it never goes red. A typo'd verb is
-therefore a silent no-op; check verify's `skipped` count after authoring claims.
+The claim grammar is a declarative registry: the built-in `CLAIM_FORMS` in
+`src/phrasebook.ts` plus forms contributed by configured repository plugins. Each form
+purely parses a line into normalized semantics (`family + key`, anchors, target, oracle,
+and optional JSON data), then evaluates that match. Every structural consumer reads those
+same parsed semantics. **A line matching none is SKIPPED** (`no verifier (dialect gap)`);
+a line matching more than one form is rejected as ambiguous instead of depending on
+registry order.
 
-**`coherence phrasebook` is the generated authority** — it prints the table straight
-from the `CLAIM_FORMS` registry, so it never lies about the current grammar. The table
-below is a hand-maintained convenience copy: nothing compares it against the registry,
-so it *can* drift. When the two disagree, the verb (and the registry behind it) wins —
-run `coherence phrasebook` to see the source of truth.
+**`coherence phrasebook` is the generated authority** — it prints the current project's
+composed runtime registry, including plugin forms. The table below is a hand-maintained
+convenience copy; run `coherence phrasebook` to see the source of truth.
 
 | Claim | Grammar | Tier | Example |
 | --- | --- | --- | --- |
@@ -465,7 +465,7 @@ Two warnings:
 ## Commands
 
 - `coherence phrasebook` — print the claim-form table (name, grammar, tier, example)
-  straight from the `CLAIM_FORMS` registry (`src/phrasebook.ts`). The generated authority
+  from the current project's composed built-in + plugin registry. The generated authority
   behind the phrasebook table above.
 - `coherence graph` — emit `graph.json` + `_graph.html` (the outline) to `outputDir`.
 - `coherence overview` — emit `_overview.html` + `AGENTS.md`.

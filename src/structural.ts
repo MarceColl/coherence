@@ -11,12 +11,12 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, readdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { parseBoundary, type Boundary } from "./boundary.ts";
-import { parseParity, type Parity } from "./parity.ts";
+import { boundaryFromMatch, type Boundary } from "./boundary.ts";
+import { parityFromMatch, type Parity } from "./parity.ts";
 import { buildGraph } from "./derive.ts";
 import { loadProject } from "./plugins.ts";
 import { ownerOf } from "./walk.ts";
-import { CONFORMS_RE, dictionaryDir, parseWord } from "./phrasebook.ts";
+import { CONFORMS_RE, dictionaryDir, parseWord, resolvedClaimsFor } from "./phrasebook.ts";
 import { noveltyVerdict, renderNovelty, scanSurface, surfaceSignals } from "./novelty.ts";
 import type { Config, Graph, GraphNode, StructuralFact } from "./types.ts";
 
@@ -126,19 +126,29 @@ interface Ledger {
   invariants: Set<string>;
   boundaries: Map<string, Boundary>; // keyed by invariant name
   parities: Map<string, Parity>;     // parity claims, keyed by invariant name (first-class anchors)
-  claims: Set<string>;               // other claims (exists/imports/…)
+  claims: Map<string, string>;       // semantic identity → canonical meaning
 }
 
-function ledgerOf(node: GraphNode): Ledger {
+function ledgerOf(graph: Graph, node: GraphNode): Ledger {
   const boundaries = new Map<string, Boundary>();
   const parities = new Map<string, Parity>();
-  const claims = new Set<string>();
+  const claims = new Map<string, string>();
+  const resolved = new Map(resolvedClaimsFor(graph, node).map((claim) => [claim.line, claim]));
   for (const c of node.claims ?? []) {
-    const b = parseBoundary(c);
-    const p = b ? null : parseParity(c);
+    const parsed = resolved.get(c);
+    const b = parsed ? boundaryFromMatch(parsed.match) : null;
+    const p = parsed && !b ? parityFromMatch(parsed.match) : null;
     if (b) boundaries.set(b.inv, b);
     else if (p) parities.set(p.inv, p);
-    else claims.add(c);
+    else if (parsed) {
+      const identity = `${parsed.match.family}\u0000${parsed.match.key}`;
+      claims.set(identity, canonicalJson({
+        target: parsed.match.target ?? null,
+        oracle: parsed.match.oracle ?? null,
+        data: parsed.match.data ?? null,
+        anchors: parsed.match.anchors ?? [],
+      }));
+    } else claims.set(`raw\u0000${c}`, c);
   }
   return {
     label: node.label,
@@ -151,7 +161,20 @@ function ledgerOf(node: GraphNode): Ledger {
 
 function ledgersOf(graph: Graph): Map<string, Ledger> {
   const out = new Map<string, Ledger>();
-  for (const n of graph.nodes) if (n.kind === "component") out.set(n.label, ledgerOf(n));
+  for (const n of graph.nodes) if (n.kind === "component") out.set(n.label, ledgerOf(graph, n));
+  return out;
+}
+
+/** Every normalized boundary claim, preserving component and declaration order. */
+export function boundaryClaims(graph: Graph): Array<Boundary & { component: string }> {
+  const out: Array<Boundary & { component: string }> = [];
+  for (const node of graph.nodes) {
+    if (node.kind !== "component") continue;
+    for (const claim of resolvedClaimsFor(graph, node)) {
+      const boundary = boundaryFromMatch(claim.match);
+      if (boundary) out.push({ ...boundary, component: node.label });
+    }
+  }
   return out;
 }
 
@@ -160,10 +183,8 @@ function ledgersOf(graph: Graph): Map<string, Ledger> {
  *  consume, parsed ONCE from the graph the harness already built (no spec re-walk). */
 export function allBoundaries(graph: Graph): Map<string, Boundary & { component: string }> {
   const out = new Map<string, Boundary & { component: string }>();
-  for (const n of graph.nodes)
-    if (n.kind === "component")
-      for (const b of ledgerOf(n).boundaries.values())
-        if (!out.has(b.chokepoint)) out.set(b.chokepoint, { ...b, component: n.label });
+  for (const boundary of boundaryClaims(graph))
+    if (!out.has(boundary.chokepoint)) out.set(boundary.chokepoint, boundary);
   return out;
 }
 
@@ -174,11 +195,19 @@ export function allBoundaries(graph: Graph): Map<string, Boundary & { component:
  *  grading enshrinement) has to consult the full list, not whichever claim the map happened
  *  to keep. Returns [] when no claim anchors that symbol. */
 export function boundariesAt(graph: Graph, sym: string): Array<Boundary & { component: string }> {
-  const out: Array<Boundary & { component: string }> = [];
-  for (const n of graph.nodes)
-    if (n.kind === "component")
-      for (const b of ledgerOf(n).boundaries.values())
-        if (b.chokepoint === sym) out.push({ ...b, component: n.label });
+  return boundaryClaims(graph).filter((boundary) => boundary.chokepoint === sym);
+}
+
+/** Every normalized parity claim, preserving component and declaration order. */
+export function parityClaims(graph: Graph): Array<Parity & { component: string }> {
+  const out: Array<Parity & { component: string }> = [];
+  for (const node of graph.nodes) {
+    if (node.kind !== "component") continue;
+    for (const claim of resolvedClaimsFor(graph, node)) {
+      const parity = parityFromMatch(claim.match);
+      if (parity) out.push({ ...parity, component: node.label });
+    }
+  }
   return out;
 }
 
@@ -274,7 +303,8 @@ export function diffGraphs(before: Graph, after: Graph): StructuralDiff {
     for (const [inv, bnd] of b.boundaries) {
       const prev = a.boundaries.get(inv);
       if (!prev) d.boundaryAdded.push({ comp: label, b: bnd });
-      else if (prev.chokepoint !== bnd.chokepoint || prev.oracle !== bnd.oracle || prev.verb !== bnd.verb)
+      else if (prev.chokepoint !== bnd.chokepoint || prev.oracle !== bnd.oracle
+          || prev.verb !== bnd.verb || canonicalJson(prev.data ?? null) !== canonicalJson(bnd.data ?? null))
         d.boundaryRewired.push({ comp: label, inv, before: prev, after: bnd });
     }
     for (const [inv, bnd] of a.boundaries) if (!b.boundaries.has(inv)) d.boundaryRemoved.push({ comp: label, b: bnd });
@@ -287,8 +317,10 @@ export function diffGraphs(before: Graph, after: Graph): StructuralDiff {
     }
     for (const [inv, par] of a.parities) if (!b.parities.has(inv)) d.parityRemoved.push({ comp: label, p: par });
     let added = 0, removed = 0;
-    for (const c of b.claims) if (!a.claims.has(c)) added++;
-    for (const c of a.claims) if (!b.claims.has(c)) removed++;
+    for (const [id, signature] of b.claims)
+      if (a.claims.get(id) !== signature) added++;
+    for (const [id, signature] of a.claims)
+      if (b.claims.get(id) !== signature) removed++;
     if (added || removed) d.claimDelta.push({ comp: label, added, removed });
   }
 
@@ -305,7 +337,8 @@ export function diffGraphs(before: Graph, after: Graph): StructuralDiff {
   return d;
 }
 
-const fmtB = (b: Boundary) => `"${b.inv}" at ${b.chokepoint}${b.oracle ? ` via ${b.verb} "${b.oracle}"` : ""}`;
+const fmtB = (b: Boundary) =>
+  `"${b.inv}" at ${b.chokepoint}${b.verb ? ` via ${b.verb}${b.oracle ? ` "${b.oracle}"` : ""}` : ""}`;
 const fmtP = (p: Parity) => `"${p.inv}" over ${p.domain} between ${p.f} and ${p.g} via test "${p.oracle}"`;
 
 /** Render the diff; return the losses that `--strict` gates on. */

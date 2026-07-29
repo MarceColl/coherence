@@ -23,8 +23,7 @@
 //   advisory drives you to declare, not yet a hard gate).
 import type { Config, Graph } from "./types.ts";
 import { globToRe } from "./decompose.ts";
-import { allBoundaries } from "./structural.ts";
-import { parseParity } from "./parity.ts";
+import { allBoundaries, parityClaims } from "./structural.ts";
 
 const pad = (s: unknown, n: number) => String(s).padEnd(n);
 
@@ -57,17 +56,14 @@ export async function contracts(cfg: Config, graph: Graph, mode: "render" | "che
 
   // ── anchoring evidence: every boundary chokepoint + every parity claim's symbols ──
   const boundaryAt = allBoundaries(graph); // chokepoint → claim
-  const parityClaims: Array<{ comp: string; domain: string; f: string; g: string; inv: string }> = [];
-  for (const n of graph.nodes)
-    if (n.kind === "component")
-      for (const c of n.claims ?? []) { const p = parseParity(c); if (p) parityClaims.push({ comp: n.label, ...p }); }
+  const parities = parityClaims(graph);
   const anchorsOf = (labels: string[]): string[] => {
     const out: string[] = [];
     for (const l of labels) {
       const b = boundaryAt.get(l);
       if (b) out.push(`boundary "${b.inv}" at ${l} (${b.component})`);
-      for (const p of parityClaims)
-        if (p.f === l || p.g === l || p.domain === l) out.push(`parity "${p.inv}" over ${p.domain} (${p.comp})`);
+      for (const p of parities)
+        if (p.f === l || p.g === l || p.domain === l) out.push(`parity "${p.inv}" over ${p.domain} (${p.component})`);
     }
     return [...new Set(out)];
   };
@@ -100,7 +96,7 @@ export async function contracts(cfg: Config, graph: Graph, mode: "render" | "che
   const coverSymbol = (label: string) => { for (const f of symFiles.get(label) ?? []) coveredFiles.add(f); };
   for (const r of rows) for (const s of [r.producer, r.consumer, r.type]) coverSymbol(s);
   for (const sym of boundaryAt.keys()) coverSymbol(sym);
-  for (const p of parityClaims) for (const s of [p.domain, p.f, p.g]) coverSymbol(s);
+  for (const p of parities) for (const s of [p.domain, p.f, p.g]) coverSymbol(s);
 
   const shared: Array<{ file: string; spans: string[] }> = [];
   if (artDefs.length) {

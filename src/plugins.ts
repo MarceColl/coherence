@@ -7,13 +7,21 @@ import { cloudflare } from "./adapters/cloudflare.ts";
 import { python } from "./adapters/python.ts";
 import { typescript } from "./adapters/typescript.ts";
 import { loadConfig } from "./config.ts";
-import type { CoherencePluginModule, GraphFragment, PluginCapabilities, ReadonlyGraph } from "./plugin.ts";
+import { assertJsonValue, deepFreeze } from "./json.ts";
+import { CLAIM_FORMS, type RuntimeProjectCheck } from "./phrasebook.ts";
+import type {
+  ClaimForm,
+  CoherencePluginModule,
+  GraphFragment,
+  PluginCapabilities,
+  ProjectCheck,
+  ReadonlyGraph,
+} from "./plugin.ts";
 import type {
   Config,
   Graph,
   GraphEdge,
   GraphNode,
-  JsonValue,
   LanguageAdapter,
   PlatformAdapter,
   PluginDeclaration,
@@ -34,6 +42,8 @@ export interface ProjectRuntime {
   readonly plugins: readonly LoadedPlugin[];
   readonly languages: ReadonlyMap<string, LanguageAdapter>;
   readonly platforms: ReadonlyMap<string, PlatformAdapter>;
+  readonly claimForms: readonly ClaimForm[];
+  readonly projectChecks: readonly RuntimeProjectCheck[];
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -95,7 +105,8 @@ function pluginCapabilities(value: unknown, plugin: string): asserts value is Pl
   if (!isRecord(value))
     throw new Error(`Plugin "${plugin}" initialization returned invalid capabilities`);
   for (const key of Object.keys(value))
-    if (key !== "adapters" && key !== "contributeGraph")
+    if (key !== "adapters" && key !== "contributeGraph"
+        && key !== "claimForms" && key !== "projectChecks")
       throw new Error(`Plugin "${plugin}" returned unsupported capability "${key}"`);
   if (value.contributeGraph !== undefined && typeof value.contributeGraph !== "function")
     throw new Error(`Plugin "${plugin}" contributeGraph must be a function`);
@@ -105,6 +116,28 @@ function pluginCapabilities(value: unknown, plugin: string): asserts value is Pl
       if (key !== "languages" && key !== "platforms")
         throw new Error(`Plugin "${plugin}" returned unsupported adapter capability "${key}"`);
   }
+  if (value.claimForms !== undefined) {
+    if (!Array.isArray(value.claimForms))
+      throw new Error(`Plugin "${plugin}" claimForms must be an array`);
+    for (const [index, form] of value.claimForms.entries()) claimForm(form, plugin, index);
+  }
+  if (value.projectChecks !== undefined) {
+    if (!Array.isArray(value.projectChecks)
+        || !value.projectChecks.every((check) => typeof check === "function"))
+      throw new Error(`Plugin "${plugin}" projectChecks must be an array of functions`);
+  }
+}
+
+function claimForm(value: unknown, plugin: string, index: number): asserts value is ClaimForm {
+  const subject = `Plugin "${plugin}" claim form at index ${index}`;
+  if (!isRecord(value)) throw new Error(`${subject} must be an object`);
+  for (const key of ["name", "grammar", "example"])
+    if (typeof value[key] !== "string" || !value[key])
+      throw new Error(`${subject}.${key} must be a non-empty string`);
+  if (!["deterministic", "live", "executable", "hybrid"].includes(String(value.tier)))
+    throw new Error(`${subject}.tier is invalid`);
+  if (typeof value.parse !== "function" || typeof value.evaluate !== "function")
+    throw new Error(`${subject} must define parse and evaluate functions`);
 }
 
 const NODE_KEYS = new Set([
@@ -117,39 +150,6 @@ const FACT_KEYS = new Set(["id", "label", "value", "policy"]);
 function assertKeys(value: UnknownRecord, allowed: ReadonlySet<string>, subject: string): void {
   for (const key of Object.keys(value))
     if (!allowed.has(key)) throw new Error(`${subject} has unsupported field "${key}"`);
-}
-
-function jsonValue(value: unknown, subject: string, ancestors = new Set<object>()): asserts value is JsonValue {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return;
-  if (typeof value === "number") {
-    if (Number.isFinite(value)) return;
-    throw new Error(`${subject} must contain only finite JSON numbers`);
-  }
-  if (typeof value !== "object")
-    throw new Error(`${subject} must be JSON-serializable`);
-  if (ancestors.has(value))
-    throw new Error(`${subject} must not contain cycles`);
-  ancestors.add(value);
-  if (Array.isArray(value)) {
-    if (Object.keys(value).length !== value.length
-        || Reflect.ownKeys(value).some((key) =>
-          typeof key === "symbol" || (key !== "length" && !/^(0|[1-9]\d*)$/.test(key))))
-      throw new Error(`${subject} must be a dense JSON array without custom properties`);
-    for (const [index, item] of value.entries()) jsonValue(item, `${subject}[${index}]`, ancestors);
-  } else {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null)
-      throw new Error(`${subject} must contain only plain JSON objects`);
-    for (const key of Reflect.ownKeys(value)) {
-      if (typeof key === "symbol")
-        throw new Error(`${subject} must not contain symbol keys`);
-      const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
-      if (!descriptor.enumerable || !Object.hasOwn(descriptor, "value"))
-        throw new Error(`${subject}.${key} must be an enumerable JSON value`);
-      jsonValue(descriptor.value, `${subject}.${key}`, ancestors);
-    }
-  }
-  ancestors.delete(value);
 }
 
 function stringField(
@@ -188,7 +188,7 @@ function graphNode(value: unknown, plugin: string, index: number): asserts value
   stringArray(value, "invariants", subject);
   if (value.data !== undefined) {
     if (!isRecord(value.data)) throw new Error(`${subject}.data must be an object`);
-    jsonValue(value.data, `${subject}.data`);
+    assertJsonValue(value.data, `${subject}.data`);
   }
 }
 
@@ -199,7 +199,7 @@ function graphEdge(value: unknown, plugin: string, index: number): asserts value
   for (const key of ["id", "source", "target", "kind"]) stringField(value, key, subject, true);
   if (value.data !== undefined) {
     if (!isRecord(value.data)) throw new Error(`${subject}.data must be an object`);
-    jsonValue(value.data, `${subject}.data`);
+    assertJsonValue(value.data, `${subject}.data`);
   }
 }
 
@@ -209,7 +209,7 @@ function structuralFact(value: unknown, plugin: string, index: number): asserts 
   assertKeys(value, FACT_KEYS, subject);
   stringField(value, "id", subject, true);
   stringField(value, "label", subject, true);
-  if (Object.hasOwn(value, "value")) jsonValue(value.value, `${subject}.value`);
+  if (Object.hasOwn(value, "value")) assertJsonValue(value.value, `${subject}.value`);
   if (value.policy !== undefined) {
     if (!isRecord(value.policy)) throw new Error(`${subject}.policy must be an object`);
     assertKeys(value.policy, new Set(["removal", "change"]), `${subject}.policy`);
@@ -231,13 +231,6 @@ function graphFragment(value: unknown, plugin: string): asserts value is GraphFr
     graphEdge(edge, plugin, index);
   for (const [index, fact] of ((value.facts as unknown[] | undefined) ?? []).entries())
     structuralFact(fact, plugin, index);
-}
-
-function deepFreeze<Value>(value: Value, seen = new Set<object>()): Value {
-  if (typeof value !== "object" || value === null || seen.has(value)) return value;
-  seen.add(value);
-  for (const child of Object.values(value)) deepFreeze(child, seen);
-  return Object.freeze(value);
 }
 
 function clone<Value>(value: Value): Value {
@@ -350,6 +343,9 @@ export async function loadProject(root: string): Promise<ProjectRuntime> {
 
   const languages = new Map<string, LanguageAdapter>(Object.entries(BUILTIN_LANGUAGES));
   const platforms = new Map<string, PlatformAdapter>(Object.entries(BUILTIN_PLATFORMS));
+  const claimForms: ClaimForm[] = CLAIM_FORMS.map((form) => Object.freeze(form));
+  const claimFormNames = new Set(claimForms.map((form) => form.name));
+  const projectChecks: RuntimeProjectCheck[] = [];
   for (const plugin of loaded) {
     const adapters = plugin.capabilities.adapters;
     for (const [key, adapter] of Object.entries(capabilityRecord(adapters?.languages, plugin.name, "languages"))) {
@@ -362,6 +358,13 @@ export async function loadProject(root: string): Promise<ProjectRuntime> {
       platformAdapter(adapter, plugin.name, key);
       platforms.set(key, adapter);
     }
+    for (const form of plugin.capabilities.claimForms ?? []) {
+      if (claimFormNames.has(form.name)) throw new Error(`Duplicate claim form name "${form.name}"`);
+      claimFormNames.add(form.name);
+      claimForms.push(Object.freeze(form));
+    }
+    for (const check of plugin.capabilities.projectChecks ?? [])
+      projectChecks.push(Object.freeze({ plugin: plugin.name, check }));
   }
 
   if (!languages.has(config.language)) throw new Error(`Unknown language adapter "${config.language}"`);
@@ -373,5 +376,7 @@ export async function loadProject(root: string): Promise<ProjectRuntime> {
     plugins: Object.freeze(loaded),
     languages,
     platforms,
+    claimForms: Object.freeze(claimForms),
+    projectChecks: Object.freeze(projectChecks),
   });
 }
