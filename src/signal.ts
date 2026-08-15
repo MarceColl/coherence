@@ -27,8 +27,7 @@ import {
 import {
   appendDecision, readJournal, resolve as resolveJournal, type DecisionRecord,
 } from "./decisions.ts";
-import { parseBoundary } from "./boundary.ts";
-import { parseParity } from "./parity.ts";
+import { parseClaim } from "./phrasebook.ts";
 
 export interface ChangeSignal {
   ref: string;
@@ -74,12 +73,12 @@ export function signalState(v: NoveltyVerdict, anchorsAdded: number, attested: b
  * surface arrived with invariants and anchors, so recover those counts from the after
  * graph while retaining the temporal ledger's compact rendering contract. */
 export function anchorsAddedByChange(structural: StructuralDiff, after: Graph): number {
-  let n = structural.invAdded.length + structural.boundaryAdded.length + structural.parityAdded.length;
+  let n = structural.invAdded.length + structural.anchorAdded.length;
   const added = new Set(structural.componentsAdded);
   for (const node of after.nodes) {
     if (node.kind !== "component" || !added.has(node.label)) continue;
     n += node.invariants?.length ?? 0;
-    for (const claim of node.claims ?? []) if (parseBoundary(claim) || parseParity(claim)) n++;
+    for (const claim of node.claims ?? []) if (parseClaim(claim)?.claim.anchors.length) n++;
   }
   return n;
 }

@@ -31,8 +31,7 @@ test("only a zero-anchor alarm without attestation needs a decision", () => {
 test("anchors inside a brand-new component count even when the ledger summarizes it", () => {
   const structural: ChangeSignal["structural"] = {
     componentsAdded: ["Core"], componentsRemoved: [], invAdded: [], invRemoved: [],
-    boundaryAdded: [], boundaryRemoved: [], boundaryRewired: [], parityAdded: [],
-    parityRemoved: [], parityRewired: [], claimDelta: [],
+    anchorAdded: [], anchorRemoved: [], anchorRewired: [], claimDelta: [],
   };
   const after = graph([comp("src", {
     label: "Core", invariants: ["writes are scoped"],
@@ -64,8 +63,7 @@ test("the failure renders the exact two ways to settle it", () => {
     },
     structural: {
       componentsAdded: [], componentsRemoved: [], invAdded: [], invRemoved: [],
-      boundaryAdded: [], boundaryRemoved: [], boundaryRewired: [], parityAdded: [],
-      parityRemoved: [], parityRewired: [], claimDelta: [],
+      anchorAdded: [], anchorRemoved: [], anchorRewired: [], claimDelta: [],
     },
   };
   const out = formatSignal(s).join("\n");

@@ -30,7 +30,8 @@ import type { Config, Graph, GraphNode } from "./types.ts";
 import type {
   PromiseModel, PromiseComponent, PromiseGate, Reliance, Zone, Grade,
 } from "./promise-model.ts";
-import { parseBoundary, claimKey, type ClaimKey } from "./boundary.ts";
+import { parseBoundary } from "./boundary.ts";
+import { claimKey, type ClaimKey } from "./phrasebook.ts";
 import { parseZones, findSpec } from "./walk.ts";
 import { gitStamp, indexClaimRecords, type StatusRecord, type ClaimRecord } from "./status.ts";
 import { fileStats, claimedFilePaths, type FileStat } from "./tree.ts";

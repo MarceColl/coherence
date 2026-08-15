@@ -12,11 +12,10 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseBoundary, type Boundary } from "./boundary.ts";
-import { parseParity, type Parity } from "./parity.ts";
 import { loadConfig } from "./config.ts";
 import { buildGraph } from "./derive.ts";
 import { ownerOf } from "./walk.ts";
-import { CONFORMS_RE, dictionaryDir, parseWord } from "./phrasebook.ts";
+import { conformsWord, dictionaryDir, parseClaim, parseWord, type ParsedClaim } from "./phrasebook.ts";
 import { noveltyVerdict, renderNovelty, scanSurface, surfaceSignals } from "./novelty.ts";
 import { Unrunnable } from "./floor.ts";
 import type { Config, Graph, GraphNode } from "./types.ts";
@@ -57,7 +56,7 @@ async function affectedWords(cfg: Config, changed: Set<string>): Promise<Set<str
     const base = f.replace(/\.md$/, "");
     const w = parseWord(await readFile(join(dir, f), "utf8").catch(() => ""));
     const set = new Set<string>();
-    for (const c of w?.commitments ?? []) { const m = CONFORMS_RE.exec(c); if (m) set.add(m[1]); }
+    for (const c of w?.commitments ?? []) { const ref = conformsWord(c); if (ref) set.add(ref); }
     refs.set(base, set);
   }
   const out = new Set(changed);
@@ -95,8 +94,8 @@ export async function affectedComponents(cfg: Config, graph: Graph, files: Set<s
     for (const n of graph.nodes)
       if (n.kind === "component")
         for (const cl of n.claims ?? []) {
-          const m = CONFORMS_RE.exec(cl);
-          if (m && words.has(m[1])) { hit.add(n.id.slice(2)); break; }
+          const w = conformsWord(cl);
+          if (w && words.has(w)) { hit.add(n.id.slice(2)); break; }
         }
   }
   return hit;
@@ -126,30 +125,31 @@ const git = (args: string[], cwd: string) =>
   spawnSync("git", args, { cwd, encoding: "utf8", env: scrubbedGitEnv() });
 
 export type { Boundary } from "./boundary.ts";
+
+/** An anchor as the ledger holds it: the claim line as authored, plus its normalized
+ *  reading. GENERIC over claim forms — any registry form whose ParsedClaim carries
+ *  anchors is a first-class ledger anchor, with no per-form fields here. */
+export interface Anchor { line: string; claim: ParsedClaim }
+
 interface Ledger {
   label: string;
   invariants: Set<string>;
-  boundaries: Map<string, Boundary>; // keyed by invariant name
-  parities: Map<string, Parity>;     // parity claims, keyed by invariant name (first-class anchors)
-  claims: Set<string>;               // other claims (exists/imports/…)
+  anchors: Map<string, Anchor>;  // anchor-bearing claims, keyed `${form}:${key}`
+  claims: Set<string>;           // anchor-less claims (exists/imports/…)
 }
 
 function ledgerOf(node: GraphNode): Ledger {
-  const boundaries = new Map<string, Boundary>();
-  const parities = new Map<string, Parity>();
+  const anchors = new Map<string, Anchor>();
   const claims = new Set<string>();
-  for (const c of node.claims ?? []) {
-    const b = parseBoundary(c);
-    const p = b ? null : parseParity(c);
-    if (b) boundaries.set(b.inv, b);
-    else if (p) parities.set(p.inv, p);
-    else claims.add(c);
+  for (const line of node.claims ?? []) {
+    const r = parseClaim(line);
+    if (r && r.claim.anchors.length) anchors.set(`${r.claim.form}:${r.claim.key}`, { line, claim: r.claim });
+    else claims.add(line);
   }
   return {
     label: node.label,
     invariants: new Set(node.invariants ?? []),
-    boundaries,
-    parities,
+    anchors,
     claims,
   };
 }
@@ -162,13 +162,17 @@ function ledgersOf(graph: Graph): Map<string, Ledger> {
 
 /** Every boundary claim in the graph, keyed by its CHOKEPOINT symbol — the shared
  *  input the atlas (tier derivation) and conventions (anchored set) subcommands both
- *  consume, parsed ONCE from the graph the harness already built (no spec re-walk). */
+ *  consume, parsed ONCE from the graph the harness already built (no spec re-walk).
+ *  Deliberately boundary-FAMILY (typed, not ParsedClaim): its consumers grade the
+ *  boundary concept — verb, chokepoint — which only this family carries. */
 export function allBoundaries(graph: Graph): Map<string, Boundary & { component: string }> {
   const out = new Map<string, Boundary & { component: string }>();
   for (const n of graph.nodes)
     if (n.kind === "component")
-      for (const b of ledgerOf(n).boundaries.values())
-        if (!out.has(b.chokepoint)) out.set(b.chokepoint, { ...b, component: n.label });
+      for (const c of n.claims ?? []) {
+        const b = parseBoundary(c);
+        if (b && !out.has(b.chokepoint)) out.set(b.chokepoint, { ...b, component: n.label });
+      }
   return out;
 }
 
@@ -182,8 +186,10 @@ export function boundariesAt(graph: Graph, sym: string): Array<Boundary & { comp
   const out: Array<Boundary & { component: string }> = [];
   for (const n of graph.nodes)
     if (n.kind === "component")
-      for (const b of ledgerOf(n).boundaries.values())
-        if (b.chokepoint === sym) out.push({ ...b, component: n.label });
+      for (const c of n.claims ?? []) {
+        const b = parseBoundary(c);
+        if (b && b.chokepoint === sym) out.push({ ...b, component: n.label });
+      }
   return out;
 }
 
@@ -246,12 +252,14 @@ export interface StructuralDiff {
   componentsRemoved: string[];
   invAdded: Array<{ comp: string; inv: string }>;
   invRemoved: Array<{ comp: string; inv: string }>;
-  boundaryAdded: Array<{ comp: string; b: Boundary }>;
-  boundaryRemoved: Array<{ comp: string; b: Boundary }>;
-  boundaryRewired: Array<{ comp: string; inv: string; before: Boundary; after: Boundary }>;
-  parityAdded: Array<{ comp: string; p: Parity }>;
-  parityRemoved: Array<{ comp: string; p: Parity }>;
-  parityRewired: Array<{ comp: string; inv: string; before: Parity; after: Parity }>;
+  // Anchors are GENERIC: any claim form whose ParsedClaim declares anchors participates,
+  // identified by form:key. Rewired = same identity, different RECORD text — record is
+  // each form's own statement of what is semantic (a boundary's crossing clause is pure
+  // topology, stripped from record, so annotating one is a ledger non-event exactly as
+  // it is a claimKey non-event).
+  anchorAdded: Array<{ comp: string; a: Anchor }>;
+  anchorRemoved: Array<{ comp: string; a: Anchor }>;
+  anchorRewired: Array<{ comp: string; before: Anchor; after: Anchor }>;
   claimDelta: Array<{ comp: string; added: number; removed: number }>;
 }
 
@@ -259,8 +267,7 @@ export function diffGraphs(before: Graph, after: Graph): StructuralDiff {
   const A = ledgersOf(before), B = ledgersOf(after);
   const d: StructuralDiff = {
     componentsAdded: [], componentsRemoved: [], invAdded: [], invRemoved: [],
-    boundaryAdded: [], boundaryRemoved: [], boundaryRewired: [],
-    parityAdded: [], parityRemoved: [], parityRewired: [], claimDelta: [],
+    anchorAdded: [], anchorRemoved: [], anchorRewired: [], claimDelta: [],
   };
   for (const label of B.keys()) if (!A.has(label)) d.componentsAdded.push(label);
   for (const label of A.keys()) if (!B.has(label)) d.componentsRemoved.push(label);
@@ -270,21 +277,13 @@ export function diffGraphs(before: Graph, after: Graph): StructuralDiff {
     if (!a) continue; // brand-new component — its whole ledger is "added", covered by componentsAdded
     for (const inv of b.invariants) if (!a.invariants.has(inv)) d.invAdded.push({ comp: label, inv });
     for (const inv of a.invariants) if (!b.invariants.has(inv)) d.invRemoved.push({ comp: label, inv });
-    for (const [inv, bnd] of b.boundaries) {
-      const prev = a.boundaries.get(inv);
-      if (!prev) d.boundaryAdded.push({ comp: label, b: bnd });
-      else if (prev.chokepoint !== bnd.chokepoint || prev.oracle !== bnd.oracle || prev.verb !== bnd.verb)
-        d.boundaryRewired.push({ comp: label, inv, before: prev, after: bnd });
+    for (const [id, anchor] of b.anchors) {
+      const prev = a.anchors.get(id);
+      if (!prev) d.anchorAdded.push({ comp: label, a: anchor });
+      else if (prev.claim.record !== anchor.claim.record)
+        d.anchorRewired.push({ comp: label, before: prev, after: anchor });
     }
-    for (const [inv, bnd] of a.boundaries) if (!b.boundaries.has(inv)) d.boundaryRemoved.push({ comp: label, b: bnd });
-    // parity claims — anchors like boundaries: added/removed/rewired, a removal is a LOSS
-    for (const [inv, par] of b.parities) {
-      const prev = a.parities.get(inv);
-      if (!prev) d.parityAdded.push({ comp: label, p: par });
-      else if (prev.domain !== par.domain || prev.f !== par.f || prev.g !== par.g || prev.oracle !== par.oracle)
-        d.parityRewired.push({ comp: label, inv, before: prev, after: par });
-    }
-    for (const [inv, par] of a.parities) if (!b.parities.has(inv)) d.parityRemoved.push({ comp: label, p: par });
+    for (const [id, anchor] of a.anchors) if (!b.anchors.has(id)) d.anchorRemoved.push({ comp: label, a: anchor });
     let added = 0, removed = 0;
     for (const c of b.claims) if (!a.claims.has(c)) added++;
     for (const c of a.claims) if (!b.claims.has(c)) removed++;
@@ -293,13 +292,18 @@ export function diffGraphs(before: Graph, after: Graph): StructuralDiff {
   return d;
 }
 
-const fmtB = (b: Boundary) => `"${b.inv}" at ${b.chokepoint}${b.oracle ? ` via ${b.verb} "${b.oracle}"` : ""}`;
-const fmtP = (p: Parity) => `"${p.inv}" over ${p.domain} between ${p.f} and ${p.g} via test "${p.oracle}"`;
+/** The detail fields that changed between two readings of one anchor, as render lines. */
+function detailChanges(before: Anchor, after: Anchor): string[] {
+  const keys = [...new Set([...Object.keys(before.claim.detail), ...Object.keys(after.claim.detail)])];
+  return keys
+    .filter((k) => before.claim.detail[k] !== after.claim.detail[k])
+    .map((k) => `${k} ${before.claim.detail[k] ?? "—"} → ${after.claim.detail[k] ?? "—"}`);
+}
 
-/** Render the diff; return the count of LOSSES (removed invariants/boundaries/parities/components). */
+/** Render the diff; return the count of LOSSES (removed invariants/anchors/components). */
 export function renderDiff(d: StructuralDiff, fromLabel: string, toLabel: string): number {
   console.log(`\n  STRUCTURAL LEDGER — ${fromLabel} → ${toLabel}\n`);
-  const losses = d.componentsRemoved.length + d.invRemoved.length + d.boundaryRemoved.length + d.parityRemoved.length;
+  const losses = d.componentsRemoved.length + d.invRemoved.length + d.anchorRemoved.length;
   const line = (mark: string, s: string) => console.log(`  ${mark} ${s}`);
 
   if (d.componentsAdded.length) for (const c of d.componentsAdded) line("+", `component ${c}`);
@@ -308,36 +312,22 @@ export function renderDiff(d: StructuralDiff, fromLabel: string, toLabel: string
   for (const x of d.invAdded) line("+", `invariant "${x.inv}" (${x.comp})`);
   for (const x of d.invRemoved) line("–", `invariant "${x.inv}" (${x.comp})  (REMOVED — was the spec enforcing something it no longer claims?)`);
 
-  for (const x of d.boundaryAdded) line("+", `boundary ${fmtB(x.b)} (${x.comp})`);
-  for (const x of d.boundaryRemoved) line("–", `boundary ${fmtB(x.b)} (${x.comp})  (ANCHOR REMOVED)`);
-  for (const x of d.boundaryRewired) {
-    line("~", `boundary "${x.inv}" (${x.comp}) rewired:`);
-    const cp = x.before.chokepoint !== x.after.chokepoint ? `chokepoint ${x.before.chokepoint} → ${x.after.chokepoint}` : "";
-    const or = x.before.oracle !== x.after.oracle || x.before.verb !== x.after.verb
-      ? `oracle ${x.before.verb} "${x.before.oracle}" → ${x.after.verb} "${x.after.oracle}"` : "";
-    for (const s of [cp, or].filter(Boolean)) console.log(`      ${s}`);
-  }
-
-  for (const x of d.parityAdded) line("+", `parity ${fmtP(x.p)} (${x.comp})`);
-  for (const x of d.parityRemoved) line("–", `parity ${fmtP(x.p)} (${x.comp})  (AGREEMENT ANCHOR REMOVED)`);
-  for (const x of d.parityRewired) {
-    line("~", `parity "${x.inv}" (${x.comp}) rewired:`);
-    const dm = x.before.domain !== x.after.domain ? `domain ${x.before.domain} → ${x.after.domain}` : "";
-    const fg = x.before.f !== x.after.f || x.before.g !== x.after.g
-      ? `projections ${x.before.f}/${x.before.g} → ${x.after.f}/${x.after.g}` : "";
-    const or = x.before.oracle !== x.after.oracle ? `oracle "${x.before.oracle}" → "${x.after.oracle}"` : "";
-    for (const s of [dm, fg, or].filter(Boolean)) console.log(`      ${s}`);
+  // The claim line is its own best rendering — it already reads as prose, whatever form.
+  for (const x of d.anchorAdded) line("+", `${x.a.line} (${x.comp})`);
+  for (const x of d.anchorRemoved) line("–", `${x.a.line} (${x.comp})  (ANCHOR REMOVED)`);
+  for (const x of d.anchorRewired) {
+    line("~", `${x.after.claim.form} "${x.after.claim.key}" (${x.comp}) rewired:`);
+    for (const s of detailChanges(x.before, x.after)) console.log(`      ${s}`);
   }
 
   if (d.claimDelta.length) {
     const tot = d.claimDelta.reduce((n, c) => n + c.added + c.removed, 0);
-    console.log(`\n  (${tot} non-boundary claim change(s) across ${d.claimDelta.length} component(s): ${d.claimDelta.map((c) => `${c.comp} +${c.added}/-${c.removed}`).join(", ")})`);
+    console.log(`\n  (${tot} non-anchor claim change(s) across ${d.claimDelta.length} component(s): ${d.claimDelta.map((c) => `${c.comp} +${c.added}/-${c.removed}`).join(", ")})`);
   }
 
-  const changed = losses + d.componentsAdded.length + d.invAdded.length + d.boundaryAdded.length + d.boundaryRewired.length
-    + d.parityAdded.length + d.parityRewired.length;
+  const changed = losses + d.componentsAdded.length + d.invAdded.length + d.anchorAdded.length + d.anchorRewired.length;
   if (!changed && !d.claimDelta.length) console.log("  no structural change.");
-  console.log(`\n  ${changed} structural change(s) · ${losses} loss(es) (removed invariant/boundary/parity/component)`);
+  console.log(`\n  ${changed} structural change(s) · ${losses} loss(es) (removed invariant/anchor/component)`);
   return losses;
 }
 
@@ -390,7 +380,7 @@ export async function structuralLog(cfg: Config, refA: string, refB: string | nu
   const sig = surfaceSignals(
     before.surface, after.surface,
     locDelta(cfg, refA, refB),
-    { anchorsAdded: d.invAdded.length + d.boundaryAdded.length + d.parityAdded.length, componentsAdded: d.componentsAdded.length },
+    { anchorsAdded: d.invAdded.length + d.anchorAdded.length, componentsAdded: d.componentsAdded.length },
   );
   renderNovelty(sig, noveltyVerdict(sig, cfg.novelty));
 

@@ -1137,11 +1137,11 @@ function trajectoryTab(m: IndexModel): string {
   if (s) {
     block(s.componentsRemoved, "−", "alarm", "component", (x) => `<b>${esc(x)}</b>`, "component(s)");
     block(s.invRemoved, "−", "alarm", "invariant", (x) => `<b>${esc(x.inv)}</b> <span class="dim">${esc(x.comp)}</span>`, "invariant(s)");
-    block(s.boundaryRemoved, "−", "alarm", "anchor", (x) => `<b class="mono">${esc(x.chokepoint)}</b> ${where(x.chokepoint)} <span class="dim">— ${esc(x.inv)}</span>`, "anchor(s)");
-    block(s.boundaryRewired, "~", "warn", "rewired", (x) => `<b>${esc(x.inv)}</b><div class="dim sub">${esc(x.before)} → ${esc(x.after)}</div>`, "boundary(s)");
+    block(s.anchorRemoved, "−", "alarm", "anchor", (x) => `<b class="mono">${esc(x.symbol)}</b> ${where(x.symbol)} <span class="dim">— ${esc(x.inv)}</span>`, "anchor(s)");
+    block(s.anchorRewired, "~", "warn", "rewired", (x) => `<b>${esc(x.inv)}</b><div class="dim sub">${esc(x.before)} → ${esc(x.after)}</div>`, "anchor(s)");
     block(s.componentsAdded, "+", "quiet", "component", (x) => `<b>${esc(x)}</b>`, "component(s)");
     block(s.invAdded, "+", "quiet", "invariant", (x) => `<b>${esc(x.inv)}</b> <span class="dim">${esc(x.comp)}</span>`, "invariant(s)");
-    block(s.boundaryAdded, "+", "quiet", "anchor", (x) => `<b class="mono">${esc(x.chokepoint)}</b> ${where(x.chokepoint)} <span class="dim">— ${esc(x.inv)}</span>`, "anchor(s)");
+    block(s.anchorAdded, "+", "quiet", "anchor", (x) => `<b class="mono">${esc(x.symbol)}</b> ${where(x.symbol)} <span class="dim">— ${esc(x.inv)}</span>`, "anchor(s)");
   }
 
   const claims = s && s.claimDelta.length
