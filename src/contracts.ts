@@ -23,8 +23,7 @@
 //   advisory drives you to declare, not yet a hard gate).
 import type { Config, Graph } from "./types.ts";
 import { globToRe } from "./decompose.ts";
-import { allBoundaries } from "./structural.ts";
-import { parseParity } from "./parity.ts";
+import { parseClaim } from "./phrasebook.ts";
 
 const pad = (s: unknown, n: number) => String(s).padEnd(n);
 
@@ -55,22 +54,21 @@ export async function contracts(cfg: Config, graph: Graph, mode: "render" | "che
   const artsOfSymbol = (label: string): string[] =>
     [...new Set((symFiles.get(label) ?? []).flatMap(artifactsOf))];
 
-  // ── anchoring evidence: every boundary chokepoint + every parity claim's symbols ──
-  const boundaryAt = allBoundaries(graph); // chokepoint → claim
-  const parityClaims: Array<{ comp: string; domain: string; f: string; g: string; inv: string }> = [];
+  // ── anchoring evidence: EVERY anchor-bearing claim, keyed by each symbol it names ──
+  // Generic over claim forms: a claim that anchors an invariant and names a symbol is
+  // evidence for any contract naming that symbol — a boundary's chokepoint and a parity's
+  // domain/projections today, any anchor-bearing registry form tomorrow.
+  const evidenceAt = new Map<string, string[]>(); // symbol → evidence descriptions
   for (const n of graph.nodes)
     if (n.kind === "component")
-      for (const c of n.claims ?? []) { const p = parseParity(c); if (p) parityClaims.push({ comp: n.label, ...p }); }
-  const anchorsOf = (labels: string[]): string[] => {
-    const out: string[] = [];
-    for (const l of labels) {
-      const b = boundaryAt.get(l);
-      if (b) out.push(`boundary "${b.inv}" at ${l} (${b.component})`);
-      for (const p of parityClaims)
-        if (p.f === l || p.g === l || p.domain === l) out.push(`parity "${p.inv}" over ${p.domain} (${p.comp})`);
-    }
-    return [...new Set(out)];
-  };
+      for (const line of n.claims ?? []) {
+        const r = parseClaim(line);
+        if (!r || !r.claim.anchors.length) continue;
+        for (const s of r.claim.symbols)
+          (evidenceAt.get(s) ?? evidenceAt.set(s, []).get(s)!).push(`${r.claim.form} "${r.claim.key}" at ${s} (${n.label})`);
+      }
+  const anchorsOf = (labels: string[]): string[] =>
+    [...new Set(labels.flatMap((l) => evidenceAt.get(l) ?? []))];
 
   const rows: ContractRow[] = Object.entries(decl).map(([name, d]) => {
     const missing = [d.producer, d.consumer, d.type].filter((s) => !symFiles.has(s));
@@ -94,13 +92,12 @@ export async function contracts(cfg: Config, graph: Graph, mode: "render" | "che
   // symbols per file (a shared file with no symbols is not vocabulary — skip it)
   const fileHasSymbols = new Set<string>();
   for (const n of graph.nodes) if (n.kind === "symbol" && n.path) fileHasSymbols.add(n.path);
-  // files already covered: a declared contract symbol lives there, or an anchored claim's
-  // symbol (boundary chokepoint / parity domain/f/g) does.
+  // files already covered: a declared contract symbol lives there, or a symbol named by
+  // an anchor-bearing claim does.
   const coveredFiles = new Set<string>();
   const coverSymbol = (label: string) => { for (const f of symFiles.get(label) ?? []) coveredFiles.add(f); };
   for (const r of rows) for (const s of [r.producer, r.consumer, r.type]) coverSymbol(s);
-  for (const sym of boundaryAt.keys()) coverSymbol(sym);
-  for (const p of parityClaims) for (const s of [p.domain, p.f, p.g]) coverSymbol(s);
+  for (const sym of evidenceAt.keys()) coverSymbol(sym);
 
   const shared: Array<{ file: string; spans: string[] }> = [];
   if (artDefs.length) {
