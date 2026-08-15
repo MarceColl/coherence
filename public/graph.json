@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-15 04:26Z",
+  "generatedAt": "2026-08-15 04:32Z",
   "root": "coherence",
   "absRoot": "/Users/marcecoll/proj/coherence",
   "nodes": [
@@ -2967,7 +2967,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/index-model.ts",
-      "line": 372,
+      "line": 376,
       "prose": "VIEW THREE: movement at the level of the abstraction. Every field is nullable and each\n null carries its own reason, because \"nothing moved\" and \"nothing was read\" are\n different facts and a trajectory that confused them would be the worst lie on the page."
     },
     {
@@ -2977,7 +2977,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/index-model.ts",
-      "line": 389,
+      "line": 393,
       "prose": "THE MODEL. Written to `index.json` beside the page, so every figure rendered is\n checkable against a file, and so the next run has a cursor to frame against."
     },
     {
@@ -2987,7 +2987,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/index-model.ts",
-      "line": 423,
+      "line": 427,
       "prose": "The prior run's HEAD, read back out of `index.json` — the CURSOR.\n\n Through `readJsonOrRefuse` and not a `catch → null`, because this file is a MEMORY in\n exactly floor.ts's sense: an unreadable one is not an absent one. Defaulting past a\n corrupt index.json would silently retitle the page \"FIRST LOOK — no prior index\" for a\n project that has one, which is the page lying about its own frame."
     },
     {
@@ -2997,7 +2997,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/index-model.ts",
-      "line": 448,
+      "line": 452,
       "prose": "Pick the frame. See the `Frame` doctrine above for why the order is what it is."
     },
     {
@@ -3007,7 +3007,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/index-model.ts",
-      "line": 502,
+      "line": 506,
       "prose": "THE FOUR DARKNESSES, each with its own denominator and its own repair.\n\n`unvisited` is the one that needs history, and it is therefore the one that can be\nUNMEASURABLE. It is the complement of economy's closure: a path recent concern commits\nkeep touching that the graph does not own is a path no closure can ever be computed for,\nso every read-side cost this harness reports silently excludes it. That is why it is a\ndarkness and not merely a statistic."
     },
     {
@@ -3017,7 +3017,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/index-model.ts",
-      "line": 601,
+      "line": 605,
       "prose": "WHICH COMPONENT OWNS EACH GUARDED CROSSING — the join that turns a topology diagram into\na roster of organs. `symbolDir` is label → the dirs of the components owning a symbol of\nthat name; it comes from the graph's OWN parentage (symbol → file → component), which is\nthe same chain `symbolsByDir` walks a few lines above. Longest-matching-dir-prefix over\nthe symbol's `path` gives the identical answer on the consuming project (14/14, checked\ncrossing by crossing) and would be a SECOND spelling of component ownership; this file's\nrule 1 forbids that, so the existing chain is read instead of a new one written.\n\nTHE TWO WAYS IT DOES NOT LAND, each named rather than collapsed into a shrug:\n  · the guard's symbol is nowhere in the graph — an anchor pointing at code that is not\n    there, which is precisely the `present: false` DANGLING state the atlas already\n    grades. The crossing keeps its arrow and its row; nothing pretends to own it.\n  · the name resolves inside more than one component. Then no component owns it MORE than\n    the others and picking one would be inventing a fact. It is AMBIGUOUS, it says which\n    components it could be, and it counts toward nobody's perimeter."
     },
     {
@@ -3027,7 +3027,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/index-model.ts",
-      "line": 628,
+      "line": 632,
       "prose": "The MAP, assembled from the promise model (components, zones, gates, grades), the graph\n (the darknesses) and the atlas RECORD (the crossings)."
     },
     {
@@ -3037,7 +3037,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/index-model.ts",
-      "line": 823,
+      "line": 827,
       "prose": "THE JOURNAL VIEW — `blocked` first, then open conjectures, then decisions; settled work\ncollapses to counts.\n\nNEWS FIRST WITHIN EACH SECTION, and this is the whole behavioural point: a three-day-old\nimpasse the reader has already seen is not news however severe it is, so it sinks below\nthe entries written inside the frame rather than being dropped (it is still standing, and\na standing impasse that vanished from the page would be worse than one that scrolled)."
     },
     {
@@ -3047,7 +3047,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/index-model.ts",
-      "line": 866,
+      "line": 870,
       "prose": "`coherence log`'s structural ledger, as data rather than as printed lines."
     },
     {
@@ -3057,7 +3057,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/index-model.ts",
-      "line": 887,
+      "line": 891,
       "prose": "What the CLI hands the model builder: the reader's frame override, and the run stamp\n (so the model owns no clock of its own and the render is a pure function of it)."
     },
     {
@@ -3067,7 +3067,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/index-model.ts",
-      "line": 902,
+      "line": 906,
       "prose": "BUILD THE MODEL. Every history read is INDIVIDUALLY guarded and individually reported:\na project with no git is a perfectly ordinary consumer (a shallow CI clone, a source\nexport), and one unreadable source must cost that source's section, never the page. An\n`Unrunnable` thrown by the structural diff is caught HERE rather than at the CLI's total\nhandler for exactly that reason — the CLI's handler is the right answer for a command\nwhose whole job needs history, and the wrong one for a page with three views."
     },
     {
@@ -5626,7 +5626,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/signal.ts",
-      "line": 33
+      "line": 32
     },
     {
       "id": "s:src/signal.ts#SignalOptions",
@@ -5635,7 +5635,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/signal.ts",
-      "line": 43
+      "line": 42
     },
     {
       "id": "s:src/signal.ts#SignalState",
@@ -5644,7 +5644,7 @@
       "kind": "symbol",
       "sub": "type",
       "path": "src/signal.ts",
-      "line": 51
+      "line": 50
     },
     {
       "id": "s:src/signal.ts#attestationFinding",
@@ -5653,7 +5653,7 @@
       "kind": "symbol",
       "sub": "const",
       "path": "src/signal.ts",
-      "line": 55,
+      "line": 54,
       "prose": "Stable address for the one permissible waiver. It is intentionally readable up to the\nfingerprint: `grep signal:no-new-invariant` lists every place the escape hatch was used."
     },
     {
@@ -5663,7 +5663,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/signal.ts",
-      "line": 61,
+      "line": 60,
       "prose": "Only a standing, structured finding can waive a patch. Arbitrary prose containing the\nright words does not: that would turn spelling into authority and make false positives\nindistinguishable from deliberate attestations."
     },
     {
@@ -5673,7 +5673,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/signal.ts",
-      "line": 66
+      "line": 65
     },
     {
       "id": "s:src/signal.ts#anchorsAddedByChange",
@@ -5682,7 +5682,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/signal.ts",
-      "line": 76,
+      "line": 75,
       "prose": "`diffGraphs` intentionally summarizes a brand-new component as one component event\ninstead of exploding its whole ledger. Signal still needs to know whether that new\nsurface arrived with invariants and anchors, so recover those counts from the after\ngraph while retaining the temporal ledger's compact rendering contract."
     },
     {
@@ -5692,7 +5692,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/signal.ts",
-      "line": 95,
+      "line": 94,
       "prose": "Hash the base commit plus every assessable changed path's CURRENT bytes. Reading\ncurrent bytes rather than `git diff` also covers untracked files; a missing marker covers deletions.\nPath delimiters are NUL because NUL cannot occur in a git path or file text."
     },
     {
@@ -5702,7 +5702,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/signal.ts",
-      "line": 123,
+      "line": 122,
       "prose": "Derive the current patch signal. The before graph and surface come from ONE detached\nworktree; the after side is the caller's working tree. No writes."
     },
     {
@@ -5712,7 +5712,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/signal.ts",
-      "line": 152
+      "line": 151
     },
     {
       "id": "s:src/signal.ts#signal",
@@ -5721,7 +5721,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/signal.ts",
-      "line": 173,
+      "line": 172,
       "prose": "Command-shaped entrypoint. Attestation is an explicit write; ordinary report/check\npaths are read-only."
     },
     {
@@ -5918,7 +5918,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/structural.ts",
-      "line": 27,
+      "line": 26,
       "prose": "Files changed vs `since` (a ref), or — when null — the working tree vs HEAD\n PLUS untracked files. Paths are relative to cfg.root (`--relative`). This is the\n domain `verify --staged` / `--since` scopes to."
     },
     {
@@ -5928,8 +5928,18 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/structural.ts",
-      "line": 79,
+      "line": 78,
       "prose": "Map changed files to the component dirs that own them (the deepest spec'd\n ancestor — same ownership rule the graph uses). A changed dictionary word file does NOT\n map to its owning dir (the root, spuriously) — it maps to every component that `conforms\n to` that word (transitively through nested word references), so a word edit re-verifies\n the CONFORMERS it actually propagates to, not the dictionary's accidental container."
+    },
+    {
+      "id": "s:src/structural.ts#Anchor",
+      "parent": "f:src/structural.ts",
+      "label": "Anchor",
+      "kind": "symbol",
+      "sub": "interface",
+      "path": "src/structural.ts",
+      "line": 132,
+      "prose": "An anchor as the ledger holds it: the claim line as authored, plus its normalized\n reading. GENERIC over claim forms — any registry form whose ParsedClaim carries\n anchors is a first-class ledger anchor, with no per-form fields here."
     },
     {
       "id": "s:src/structural.ts#allBoundaries",
@@ -5938,8 +5948,8 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/structural.ts",
-      "line": 166,
-      "prose": "Every boundary claim in the graph, keyed by its CHOKEPOINT symbol — the shared\n input the atlas (tier derivation) and conventions (anchored set) subcommands both\n consume, parsed ONCE from the graph the harness already built (no spec re-walk)."
+      "line": 168,
+      "prose": "Every boundary claim in the graph, keyed by its CHOKEPOINT symbol — the shared\n input the atlas (tier derivation) and conventions (anchored set) subcommands both\n consume, parsed ONCE from the graph the harness already built (no spec re-walk).\n Deliberately boundary-FAMILY (typed, not ParsedClaim): its consumers grade the\n boundary concept — verb, chokepoint — which only this family carries."
     },
     {
       "id": "s:src/structural.ts#boundariesAt",
@@ -5948,7 +5958,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/structural.ts",
-      "line": 181,
+      "line": 185,
       "prose": "EVERY boundary claim whose chokepoint is `sym` — not the single kept claim `allBoundaries`\n keeps per symbol. A chokepoint can carry several claims (e.g. one `via test` and one\n `via guard`); `allBoundaries` collapses them order-dependently, so any caller that must ask\n an ∃/∀ question across a symbol's claims (the atlas: \"is ANY claim here `via guard`?\" when\n grading enshrinement) has to consult the full list, not whichever claim the map happened\n to keep. Returns [] when no claim anchors that symbol."
     },
     {
@@ -5958,7 +5968,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/structural.ts",
-      "line": 194,
+      "line": 200,
       "prose": "Run `fn` against the project root AS IT EXISTS at a git ref (null = the live\n working tree — no checkout). The temp worktree lives only for the callback, so a\n caller can derive anything it needs from that tree (the graph, a surface scan) in\n ONE checkout instead of one per artifact."
     },
     {
@@ -5968,7 +5978,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/structural.ts",
-      "line": 240,
+      "line": 246,
       "prose": "Build the graph as it exists at a git ref (null = the live working tree)."
     },
     {
@@ -5978,7 +5988,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/structural.ts",
-      "line": 244
+      "line": 250
     },
     {
       "id": "s:src/structural.ts#diffGraphs",
@@ -5987,7 +5997,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/structural.ts",
-      "line": 258
+      "line": 266
     },
     {
       "id": "s:src/structural.ts#renderDiff",
@@ -5996,8 +6006,8 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/structural.ts",
-      "line": 300,
-      "prose": "Render the diff; return the count of LOSSES (removed invariants/boundaries/parities/components)."
+      "line": 304,
+      "prose": "Render the diff; return the count of LOSSES (removed invariants/anchors/components)."
     },
     {
       "id": "s:src/structural.ts#changedBetween",
@@ -6006,7 +6016,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/structural.ts",
-      "line": 346,
+      "line": 336,
       "prose": "Files changed refA → refB (refB null = the working tree, plus untracked). Paths\n relative to cfg.root. The domain the novelty surface scan is scoped to."
     },
     {
@@ -6016,7 +6026,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/structural.ts",
-      "line": 359,
+      "line": 349,
       "prose": "LOC added/deleted refA → refB across CODE files (cfg.codeExt), with cfg.ignore dirs\n and binary rows excluded. Untracked files (refB = null) are not counted — the\n headline use is a committed ref range."
     },
     {
@@ -6026,7 +6036,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/structural.ts",
-      "line": 375
+      "line": 365
     },
     {
       "id": "x:node:os",
@@ -8986,15 +8996,9 @@
       "kind": "imports"
     },
     {
-      "id": "f:src/signal.ts->f:src/boundary.ts:imports",
+      "id": "f:src/signal.ts->f:src/phrasebook.ts:imports",
       "source": "f:src/signal.ts",
-      "target": "f:src/boundary.ts",
-      "kind": "imports"
-    },
-    {
-      "id": "f:src/signal.ts->f:src/parity.ts:imports",
-      "source": "f:src/signal.ts",
-      "target": "f:src/parity.ts",
+      "target": "f:src/phrasebook.ts",
       "kind": "imports"
     },
     {
@@ -9061,12 +9065,6 @@
       "id": "f:src/structural.ts->f:src/boundary.ts:imports",
       "source": "f:src/structural.ts",
       "target": "f:src/boundary.ts",
-      "kind": "imports"
-    },
-    {
-      "id": "f:src/structural.ts->f:src/parity.ts:imports",
-      "source": "f:src/structural.ts",
-      "target": "f:src/parity.ts",
       "kind": "imports"
     },
     {

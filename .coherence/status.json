@@ -1,47 +1,47 @@
 {
   "version": 1,
   "verify": {
-    "at": "2026-08-15T04:26:20.652Z",
-    "commit": "8a38770",
+    "at": "2026-08-15T04:32:20.956Z",
+    "commit": "4c9bb1c",
     "dirty": true,
-    "tier": "full",
+    "tier": "fast",
     "scope": null,
     "cost": {
-      "totalMs": 15366.835041000002,
+      "totalMs": 1908.8047940000004,
       "claims": [
         {
           "node": "Harness core",
-          "claim": "boundary \"agent lifecycle preserves decisions and exposes the current change signal\" at runHook via guard \"hooks — main Stop snapshots without feedback while SubagentStop alone restates\"",
-          "ms": 2530.9105839999997,
-          "source": "wall"
-        },
-        {
-          "node": "Harness core",
           "claim": "typechecks",
-          "ms": 2004.0103329999997,
+          "ms": 1905.3381669999999,
           "source": "wall"
         },
         {
           "node": "Harness core",
-          "claim": "boundary \"supported lifecycle hosts share one control contract without sharing host syntax\" at setLifecycleHookForHost via guard \"Codex control — install is exact, idempotent, preserving, and runnable across nested paths\"",
-          "ms": 797.9101250000003,
+          "claim": "boundary \"agent lifecycle preserves decisions and exposes the current change signal\" at runHook via guard \"hooks — main Stop snapshots without feedback while SubagentStop alone restates\"",
+          "ms": 0.7199169999998958,
           "source": "wall"
         },
         {
           "node": "Harness core",
-          "claim": "boundary \"regulation evaluates and repairs the selected agent host\" at observeRegulation via guard \"regulate — selected Codex host cannot be redeemed by Claude control\"",
-          "ms": 729.0285000000003,
+          "claim": "cli.ts imports ./config.ts",
+          "ms": 0.5494170000001759,
+          "source": "wall"
+        },
+        {
+          "node": "Coherence",
+          "claim": "coherence.config.json exists at root",
+          "ms": 0.31483400000001893,
           "source": "wall"
         },
         {
           "node": "Coherence",
           "claim": "passes test \"control — this repository's own lifecycle control is PRESENT\"",
-          "ms": 541.8356670000001,
+          "ms": 0.26279199999999037,
           "source": "wall"
         }
       ]
     },
-    "lastFastAt": "2026-08-02T23:37:58.093Z",
+    "lastFastAt": "2026-08-15T04:32:20.956Z",
     "lastFullAt": "2026-08-15T04:26:20.652Z",
     "claims": [
       {
@@ -49,11 +49,11 @@
         "claim": "coherence.config.json exists at root",
         "kind": "pass",
         "detail": "coherence.config.json @ root",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       },
       {
         "node": "Coherence",
@@ -70,68 +70,68 @@
         "claim": "typechecks",
         "kind": "pass",
         "detail": "",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": true,
         "lastFailAt": "2026-08-01T18:26:32.093Z",
         "lastFailCommit": "4ea7565",
-        "runs": 60
+        "runs": 61
       },
       {
         "node": "Harness core",
         "claim": "cli.ts imports ./config.ts",
         "kind": "pass",
         "detail": "",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       },
       {
         "node": "Harness core",
         "claim": "cli.ts imports ./derive.ts",
         "kind": "pass",
         "detail": "",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       },
       {
         "node": "Harness core",
         "claim": "cli.ts imports ./verify.ts",
         "kind": "pass",
         "detail": "",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       },
       {
         "node": "Harness core",
         "claim": "hooks.ts imports ./decisions.ts",
         "kind": "pass",
         "detail": "",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       },
       {
         "node": "Harness core",
         "claim": "derive.ts imports ./walk.ts",
         "kind": "pass",
         "detail": "",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       },
       {
         "node": "Harness core",
@@ -414,85 +414,85 @@
         "claim": "typescript.ts exists at this node",
         "kind": "pass",
         "detail": "typescript.ts @ this node",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       },
       {
         "node": "Source adapters",
         "claim": "python.ts exists at this node",
         "kind": "pass",
         "detail": "python.ts @ this node",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       },
       {
         "node": "Source adapters",
         "claim": "cloudflare.ts exists at this node",
         "kind": "pass",
         "detail": "cloudflare.ts @ this node",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       },
       {
         "node": "Executable contracts",
         "claim": "_helpers.ts exists at this node",
         "kind": "pass",
         "detail": "_helpers.ts @ this node",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       },
       {
         "node": "Executable contracts",
         "claim": "verify.test.ts exists at this node",
         "kind": "pass",
         "detail": "verify.test.ts @ this node",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       },
       {
         "node": "Executable contracts",
         "claim": "decisions.test.ts exists at this node",
         "kind": "pass",
         "detail": "decisions.test.ts @ this node",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       },
       {
         "node": "Executable contracts",
         "claim": "commands.test.ts exists at this node",
         "kind": "pass",
         "detail": "commands.test.ts @ this node",
-        "at": "2026-08-15T04:26:20.652Z",
-        "commit": "8a38770",
-        "tier": "full",
+        "at": "2026-08-15T04:32:20.956Z",
+        "commit": "4c9bb1c",
+        "tier": "fast",
         "everFailed": false,
-        "runs": 90
+        "runs": 91
       }
     ],
     "coverage": {
       "components": 4,
       "claimed": 4,
       "withWhy": 4,
-      "symbols": 619,
-      "documented": 348
+      "symbols": 620,
+      "documented": 349
     },
     "invariants": {
       "total": 24,

@@ -358,9 +358,13 @@ export interface StructuralView {
   componentsRemoved: Capped<string>;
   invAdded: Capped<{ comp: string; inv: string }>;
   invRemoved: Capped<{ comp: string; inv: string }>;
-  boundaryAdded: Capped<{ comp: string; inv: string; chokepoint: string; oracle: string }>;
-  boundaryRemoved: Capped<{ comp: string; inv: string; chokepoint: string; oracle: string }>;
-  boundaryRewired: Capped<{ comp: string; inv: string; before: string; after: string }>;
+  // Anchor rows are GENERIC over claim forms (a parity anchor is a row exactly like a
+  // boundary anchor — it already counted in `losses`, so hiding its row was a lie of
+  // omission). `symbol` is the claim's first named symbol (a boundary's chokepoint, a
+  // parity's domain); `inv` is the anchored invariant.
+  anchorAdded: Capped<{ comp: string; form: string; inv: string; symbol: string; oracle: string }>;
+  anchorRemoved: Capped<{ comp: string; form: string; inv: string; symbol: string; oracle: string }>;
+  anchorRewired: Capped<{ comp: string; inv: string; before: string; after: string }>;
   claimDelta: Array<{ comp: string; added: number; removed: number }>;
   changes: number;
   losses: number;
@@ -859,22 +863,22 @@ export function buildJournal(records: DecisionRecord[], sessions: number, unread
 
 // ── the TRAJECTORY ────────────────────────────────────────────────────────────────────
 
-const fmtBoundary = (b: { chokepoint: string; verb: string; oracle: string }) =>
-  `${b.chokepoint}${b.oracle ? ` via ${b.verb} "${b.oracle}"` : ""}`;
+const anchorRow = (x: { comp: string; a: { claim: { form: string; key: string; symbols: readonly string[]; detail: Readonly<Record<string, string>> } } }) =>
+  ({ comp: x.comp, form: x.a.claim.form, inv: x.a.claim.key, symbol: x.a.claim.symbols[0] ?? "", oracle: x.a.claim.detail.oracle ?? "" });
 
 /** `coherence log`'s structural ledger, as data rather than as printed lines. */
 export function structuralView(d: StructuralDiff): StructuralView {
-  const losses = d.componentsRemoved.length + d.invRemoved.length + d.boundaryRemoved.length + d.parityRemoved.length;
-  const changes = losses + d.componentsAdded.length + d.invAdded.length + d.boundaryAdded.length
-    + d.boundaryRewired.length + d.parityAdded.length + d.parityRewired.length;
+  const losses = d.componentsRemoved.length + d.invRemoved.length + d.anchorRemoved.length;
+  const changes = losses + d.componentsAdded.length + d.invAdded.length + d.anchorAdded.length
+    + d.anchorRewired.length;
   return {
     componentsAdded: capList(d.componentsAdded, CAPS.structural),
     componentsRemoved: capList(d.componentsRemoved, CAPS.structural),
     invAdded: capList(d.invAdded, CAPS.structural),
     invRemoved: capList(d.invRemoved, CAPS.structural),
-    boundaryAdded: capList(d.boundaryAdded.map((x) => ({ comp: x.comp, inv: x.b.inv, chokepoint: x.b.chokepoint, oracle: x.b.oracle })), CAPS.structural),
-    boundaryRemoved: capList(d.boundaryRemoved.map((x) => ({ comp: x.comp, inv: x.b.inv, chokepoint: x.b.chokepoint, oracle: x.b.oracle })), CAPS.structural),
-    boundaryRewired: capList(d.boundaryRewired.map((x) => ({ comp: x.comp, inv: x.inv, before: fmtBoundary(x.before), after: fmtBoundary(x.after) })), CAPS.structural),
+    anchorAdded: capList(d.anchorAdded.map(anchorRow), CAPS.structural),
+    anchorRemoved: capList(d.anchorRemoved.map(anchorRow), CAPS.structural),
+    anchorRewired: capList(d.anchorRewired.map((x) => ({ comp: x.comp, inv: x.after.claim.key, before: x.before.claim.record, after: x.after.claim.record })), CAPS.structural),
     claimDelta: d.claimDelta,
     changes, losses,
   };

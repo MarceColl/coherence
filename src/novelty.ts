@@ -186,7 +186,7 @@ export function renderNovelty(sig: NoveltySignals, v: NoveltyVerdict): void {
   console.log(`  surface: +${ex.length} exported symbol(s)${ex.length ? ` [${sample}]` : ""}`);
   if (sig.newVariants) console.log(`           +${sig.newVariants} union/enum variant(s) & table key(s) [${sig.newDomains.join(", ")}]`);
   console.log(`           +${sig.locAdded}/-${sig.locDeleted} LOC (code files)`);
-  console.log(`  anchors: +${sig.anchorsAdded} (invariants + boundary/parity claims)` +
+  console.log(`  anchors: +${sig.anchorsAdded} (invariants + anchor claims)` +
     (sig.componentsAdded ? ` · +${sig.componentsAdded} component(s)` : ""));
   if (v.level === "alarm") {
     console.log(`\n  ◀ ADVISORY — significant new surface, NO new anchors.`);

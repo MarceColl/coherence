@@ -22,8 +22,9 @@ test("diffGraphs — a removed boundary anchor is recorded as a loss", () => {
   const before = graph([comp(".", { label: "Hive", claims: ['boundary "egress" at seal via test "egress totality"'], invariants: ["egress"], why: "r" })]);
   const after = graph([comp(".", { label: "Hive", claims: [], invariants: ["egress"], why: "r" })]);
   const d = diffGraphs(before, after);
-  assert.equal(d.boundaryRemoved.length, 1);
-  assert.equal(d.boundaryRemoved[0].b.inv, "egress");
+  assert.equal(d.anchorRemoved.length, 1);
+  assert.equal(d.anchorRemoved[0].a.claim.key, "egress");
+  assert.equal(d.anchorRemoved[0].a.claim.form, "boundary");
 });
 
 test("diffGraphs — a removed invariant is a loss", () => {
@@ -37,9 +38,19 @@ test("diffGraphs — a rewired chokepoint is flagged (not silently accepted)", (
   const before = graph([comp(".", { label: "Hive", claims: ['boundary "egress" at oldSeal via test "egress totality"'], invariants: ["egress"], why: "r" })]);
   const after = graph([comp(".", { label: "Hive", claims: ['boundary "egress" at newSeal via test "egress totality"'], invariants: ["egress"], why: "r" })]);
   const d = diffGraphs(before, after);
-  assert.equal(d.boundaryRewired.length, 1);
-  assert.equal(d.boundaryRewired[0].before.chokepoint, "oldSeal");
-  assert.equal(d.boundaryRewired[0].after.chokepoint, "newSeal");
+  assert.equal(d.anchorRewired.length, 1);
+  assert.equal(d.anchorRewired[0].before.claim.detail.chokepoint, "oldSeal");
+  assert.equal(d.anchorRewired[0].after.claim.detail.chokepoint, "newSeal");
+});
+
+test("diffGraphs — annotating a boundary with a crossing is NOT a rewire (pure topology)", () => {
+  // The crossing clause is declarative; record identity strips it (boundary.ts), so the
+  // ledger must read the annotation as a non-event — the same doctrine claimKey follows.
+  const before = graph([comp(".", { label: "Hive", claims: ['boundary "egress" at seal via test "t"'], invariants: ["egress"], why: "r" })]);
+  const after = graph([comp(".", { label: "Hive", claims: ['boundary "egress" at seal crossing agent -> storage via test "t"'], invariants: ["egress"], why: "r" })]);
+  const d = diffGraphs(before, after);
+  assert.equal(d.anchorRewired.length, 0);
+  assert.equal(d.anchorAdded.length + d.anchorRemoved.length, 0);
 });
 
 test("diffGraphs — additions are tracked but are not losses", () => {
@@ -51,8 +62,8 @@ test("diffGraphs — additions are tracked but are not losses", () => {
   const d = diffGraphs(before, after);
   assert.deepEqual(d.componentsAdded, ["New"]);
   assert.deepEqual(d.invAdded, [{ comp: "Hive", inv: "writes" }]);
-  assert.equal(d.boundaryAdded.length, 1);
-  assert.equal(d.invRemoved.length + d.boundaryRemoved.length + d.componentsRemoved.length, 0);
+  assert.equal(d.anchorAdded.length, 1);
+  assert.equal(d.invRemoved.length + d.anchorRemoved.length + d.componentsRemoved.length, 0);
 });
 
 test("renderDiff — counts losses (the number --strict gates on)", async () => {
@@ -164,8 +175,9 @@ test("diffGraphs — an added parity claim is a structural addition, not a gener
   const before = graph([comp(".", { label: "Patient", why: "r" })]);
   const after = graph([comp(".", { label: "Patient", claims: [PARITY], invariants: ["disclosure faithfulness"], why: "r" })]);
   const d = diffGraphs(before, after);
-  assert.equal(d.parityAdded.length, 1);
-  assert.equal(d.parityAdded[0].p.domain, "TOOL_NAMES");
+  assert.equal(d.anchorAdded.length, 1);
+  assert.equal(d.anchorAdded[0].a.claim.form, "parity");
+  assert.equal(d.anchorAdded[0].a.claim.detail.domain, "TOOL_NAMES");
   assert.equal(d.claimDelta.length, 0); // not double-counted as a plain claim
 });
 
@@ -173,7 +185,7 @@ test("diffGraphs + renderDiff — a removed parity claim is a LOSS (what --stric
   const before = graph([comp(".", { label: "Patient", claims: [PARITY], why: "r" })]);
   const after = graph([comp(".", { label: "Patient", claims: [], why: "r" })]);
   const d = diffGraphs(before, after);
-  assert.equal(d.parityRemoved.length, 1);
+  assert.equal(d.anchorRemoved.length, 1);
   assert.equal(await losses(before, after), 1);
 });
 
@@ -181,7 +193,20 @@ test("diffGraphs — a reprojected parity (different f/g or domain) is rewired, 
   const before = graph([comp(".", { label: "Patient", claims: [PARITY], why: "r" })]);
   const after = graph([comp(".", { label: "Patient", claims: [PARITY.replace("messageProvenance", "history")], why: "r" })]);
   const d = diffGraphs(before, after);
-  assert.equal(d.parityRewired.length, 1);
-  assert.equal(d.parityRewired[0].before.g, "messageProvenance");
-  assert.equal(d.parityRewired[0].after.g, "history");
+  assert.equal(d.anchorRewired.length, 1);
+  assert.equal(d.anchorRewired[0].before.claim.detail.g, "messageProvenance");
+  assert.equal(d.anchorRewired[0].after.claim.detail.g, "history");
+});
+
+test("diffGraphs — a boundary and a parity anchoring the SAME invariant are distinct ledger entries", () => {
+  // Identity is form:key, not key alone — swapping one for the other must read as one
+  // anchor added AND one removed (a real substitution), never as a silent rewire.
+  const b = 'boundary "x" at seal via test "t"';
+  const p = 'parity "x" over D between f and g via test "t"';
+  const before = graph([comp(".", { label: "Hive", claims: [b], why: "r" })]);
+  const after = graph([comp(".", { label: "Hive", claims: [p], why: "r" })]);
+  const d = diffGraphs(before, after);
+  assert.equal(d.anchorRewired.length, 0);
+  assert.equal(d.anchorAdded.length, 1);
+  assert.equal(d.anchorRemoved.length, 1);
 });
