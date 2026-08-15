@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import type { Config, Graph } from "./types.ts";
-import { CLAIM_FORMS, proveSerialRunnerCanFail, type ClaimCtx } from "./phrasebook.ts";
+import { evaluateClaimLine, proveSerialRunnerCanFail, type ClaimCtx } from "./phrasebook.ts";
 import { ownerOf, refutedInvariants } from "./walk.ts";
 import { claimKey } from "./boundary.ts";
 import { recordVerify, readStatus, indexClaimRecords } from "./status.ts";
@@ -424,11 +424,10 @@ export async function runVerify(cfg: Config, graph: Graph, opts: VerifyOpts): Pr
       cfg, graph, root, nodeDir, node, fast: !!opts.fast, typecheck, wordStack: [], oracles,
       anchor: (inv) => { let set = anchored.get(node); if (!set) { set = new Set(); anchored.set(node, set); } set.add(inv); },
     };
-    for (const form of CLAIM_FORMS) {
-      const m = form.match(claim);
-      if (m) { const r = await form.evaluate(ctx, m); return { kind: r.kind, claim, node, detail: r.detail, declaredKind, ms: r.ms }; }
-    }
-    return { kind: "skip", claim, node, detail: "no verifier (dialect gap)", declaredKind };
+    const pending = evaluateClaimLine(ctx, claim);
+    if (!pending) return { kind: "skip", claim, node, detail: "no verifier (dialect gap)", declaredKind };
+    const r = await pending;
+    return { kind: r.kind, claim, node, detail: r.detail, declaredKind, ms: r.ms };
   };
 
   // `only` (verify --staged/--since) scopes the run to the components whose dirs

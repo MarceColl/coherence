@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-05 03:49Z",
+  "generatedAt": "2026-08-15 04:26Z",
   "root": "coherence",
-  "absRoot": "/Users/daniloc/Documents/Development/coherence",
+  "absRoot": "/Users/marcecoll/proj/coherence",
   "nodes": [
     {
       "id": "c:.",
@@ -4075,22 +4075,32 @@
       "prose": "Everything a claim form needs to evaluate, threaded from runVerify. `nodeDir`/`node`\nare the DECLARING component's disk dir + label; `anchor` records a boundary-anchored\ninvariant for that component (so the coverage gate sees it — even when the boundary is\nreached through a `conforms to` word). `typecheck` is memoized upstream (one run/verify).\n`wordStack` is the `conforms to` expansion stack for cycle/depth safety.\n\n`oracles` is the EXECUTABLE-TIER seam, memoized upstream exactly like `typecheck`: at\nmost one whole-suite resolution per verify, LAZILY — a `--fast` run or a project with no\nexecutable claims never calls it. It answers with a batch report when one is available,\nand otherwise says whether the SERIAL per-claim path is permitted at all. A null report\nwith `serialAllowed: false` is a refusal (no batch, no report, nobody asked for serial),\nand the claim skips rather than quietly costing a full pool boot."
     },
     {
+      "id": "s:src/phrasebook.ts#ParsedClaim",
+      "parent": "f:src/phrasebook.ts",
+      "label": "ParsedClaim",
+      "kind": "symbol",
+      "sub": "interface",
+      "path": "src/phrasebook.ts",
+      "line": 69,
+      "prose": "One immutable normalized reading of a claim line, produced by its form's `parse` — the\nONLY value the shared plumbing (ledger, novelty, tree, contracts, record identity) knows\na claim by. Boundary-family consumers (atlas, promise, panel rows, renderers) still use\nthe typed parseBoundary/parseParity: those features grade the boundary CONCEPT, and an\nabstraction from that single example would be a guess. This value is the deliberate\ngeneric half of that split."
+    },
+    {
       "id": "s:src/phrasebook.ts#ClaimForm",
       "parent": "f:src/phrasebook.ts",
       "label": "ClaimForm",
       "kind": "symbol",
       "sub": "interface",
       "path": "src/phrasebook.ts",
-      "line": 61
+      "line": 95
     },
     {
-      "id": "s:src/phrasebook.ts#match()",
+      "id": "s:src/phrasebook.ts#parse()",
       "parent": "f:src/phrasebook.ts",
-      "label": "match()",
+      "label": "parse()",
       "kind": "symbol",
       "sub": "method",
       "path": "src/phrasebook.ts",
-      "line": 67
+      "line": 101
     },
     {
       "id": "s:src/phrasebook.ts#evaluate()",
@@ -4099,7 +4109,27 @@
       "kind": "symbol",
       "sub": "method",
       "path": "src/phrasebook.ts",
-      "line": 68
+      "line": 102
+    },
+    {
+      "id": "s:src/phrasebook.ts#parseClaim",
+      "parent": "f:src/phrasebook.ts",
+      "label": "parseClaim",
+      "kind": "symbol",
+      "sub": "function",
+      "path": "src/phrasebook.ts",
+      "line": 107,
+      "prose": "First matching form wins — the order of CLAIM_FORMS IS the precedence. Null = no form\n reads the line (verify's dialect-gap skip; a word commitment's RED)."
+    },
+    {
+      "id": "s:src/phrasebook.ts#evaluateClaimLine",
+      "parent": "f:src/phrasebook.ts",
+      "label": "evaluateClaimLine",
+      "kind": "symbol",
+      "sub": "function",
+      "path": "src/phrasebook.ts",
+      "line": 116,
+      "prose": "THE ONE evaluation path — parse, anchor every claim.anchors (BEFORE evaluating, so an\n invariant stays anchored even while its claim is red, exactly the historical behavior),\n then evaluate. Used by verify's evalClaim AND the `conforms to` expansion loop; null =\n no form matched, and each caller owns what that means (skip vs RED)."
     },
     {
       "id": "s:src/phrasebook.ts#Word",
@@ -4108,7 +4138,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/phrasebook.ts",
-      "line": 76,
+      "line": 128,
       "prose": "── the dictionary word file ──────────────────────────────────────────────────────────\n`<coherence root>/<dictionary>/<Word>.md`: a `# <Word>` heading, first non-blank line =\nintent, a `## commitments` bullet list where each bullet is a claim line in THIS grammar\n(including `boundary …` and nested `conforms to <OtherWord>`). Parsed with walk.ts's\nregex-heading style + markdown-unescape so a prettified word file still parses."
     },
     {
@@ -4118,7 +4148,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/phrasebook.ts",
-      "line": 80,
+      "line": 132,
       "prose": "Parse a dictionary word file, or null if it is not a well-formed word (a broken\n reference must go RED, not skip — a word is a contract)."
     },
     {
@@ -4128,7 +4158,7 @@
       "kind": "symbol",
       "sub": "const",
       "path": "src/phrasebook.ts",
-      "line": 99,
+      "line": 151,
       "prose": "Where a word file resolves, relative to the coherence root."
     },
     {
@@ -4138,7 +4168,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/phrasebook.ts",
-      "line": 107,
+      "line": 159,
       "prose": "A dictionary word plus the components that `conforms to` it — for the overview render."
     },
     {
@@ -4148,7 +4178,7 @@
       "kind": "symbol",
       "sub": "const",
       "path": "src/phrasebook.ts",
-      "line": 112,
+      "line": 164,
       "prose": "The `conforms to <Word>` grammar — SINGLE HOME. Consumed by the claim form's `match`,\n the dictionary cross-reference in `loadDictionary`, and the `--staged`/`--since` word-edit\n propagation scope in structural.ts. Capture group 1 is the word token."
     },
     {
@@ -4158,7 +4188,7 @@
       "kind": "symbol",
       "sub": "const",
       "path": "src/phrasebook.ts",
-      "line": 116,
+      "line": 168,
       "prose": "Regex-escape a string so it matches literally when interpolated into a RegExp or passed\n to a test runner whose `-t <name>` treats the arg as a regex (vitest, jest)."
     },
     {
@@ -4168,7 +4198,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/phrasebook.ts",
-      "line": 140,
+      "line": 192,
       "prose": "Resolve ONE named test — the shared executable arm of `passes test`,\n`boundary … via test`, and `parity … via test`. THE SINGLE FRONT DOOR: every runner\ninvocation coherence makes on a project's behalf goes through here, which is why\nbatching is a change to this one function rather than to three claim forms.\n\nTwo arms, one contract:\n  BATCH — a whole-suite report is available, so the answer is a lookup (`resolveFromBatch`).\n  PER-CLAIM — shell `config.test` with the name appended, regex-escaped for the runner's\n    `-t`; exit 0 alone is not trusted (`testMatch` requires positive evidence the named\n    test actually ran — an exit-0 runner that matched zero tests would otherwise pass a\n    renamed/deleted oracle).\n\nBoth arms require positive evidence and both go red on zero matches, so which one\nanswered is an operational detail, never a difference in what green means.\n\n`ms` — the claim's HOLDING COST, and ONLY the batch arm can report it. The report carries\nthe runner's own per-test durations, so a batched claim's cost is measured by the thing\nthat ran it. The serial arm returns none: what a wall clock sees there is a whole test-pool\nboot charged to whichever claim happened to trigger it, which is a fact about the profile,\nnot about the claim. Verify's own wall clock takes over when this is absent."
     },
     {
@@ -4178,7 +4208,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/phrasebook.ts",
-      "line": 151,
+      "line": 203,
       "prose": "The SERIAL arm of `execNamedTest`, factored so the canary below probes the EXACT code\n path a claim's verdict rides on — same spawn, same exit-code reading, same `testMatch`\n evidence rule. Exit 0 alone is not trusted: `testMatch` requires positive evidence the\n named test actually ran (a zero-match runner that exits 0 would otherwise pass a\n renamed/deleted oracle)."
     },
     {
@@ -4188,7 +4218,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/phrasebook.ts",
-      "line": 173,
+      "line": 225,
       "prose": "THE SERIAL CANARY — the repo's own doctrine applied to the instrument: a checker never\nobserved to fail has not been shown to be a checker. The batch path proves a vanished\noracle structurally (zero matches in the report is its own red); the serial path had to\nTRUST `config.test` + `testMatch`, on a runner class this repo has itself documented as\nun-guardable by testMatch (node:test multi-file: a real name and a name existing nowhere\nproduce byte-identical passing output — measured, test-batch.ts:110, types.ts).\n\nSo, once per serial verify, run the runner with a name that provably exists nowhere and\nrequire it to FAIL (nonzero exit, or a `testMatch` miss — the same reading a claim gets).\nA runner that PASSES the canary cannot filter by name: every green it would produce is\ngreen-by-absence, and verify must refuse it exactly as the batch path refuses. Cost is\none extra runner boot per serial run."
     },
     {
@@ -4198,7 +4228,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/phrasebook.ts",
-      "line": 191,
+      "line": 243,
       "prose": "Scan the dictionary dir + cross-reference the graph's `conforms to` claims. Empty when\n the project has no dictionary dir (so the overview's Dictionary section is omitted)."
     },
     {
@@ -4208,7 +4238,7 @@
       "kind": "symbol",
       "sub": "const",
       "path": "src/phrasebook.ts",
-      "line": 209
+      "line": 261
     },
     {
       "id": "f:src/premise.ts",

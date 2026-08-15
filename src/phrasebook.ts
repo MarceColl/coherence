@@ -15,8 +15,8 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import type { Config, Graph } from "./types.ts";
-import { BOUNDARY_RE } from "./boundary.ts";
-import { PARITY_RE } from "./parity.ts";
+import { parseBoundary, normalizeBoundaryClaim } from "./boundary.ts";
+import { parseParity } from "./parity.ts";
 import { analyzeOracle, analyzeParityOracle } from "./oracle-domain.ts";
 import { unescapeMd } from "./walk.ts";
 import { resolveFromBatch, type OracleAccess } from "./test-batch.ts";
@@ -58,14 +58,66 @@ export interface ClaimCtx {
   oracles?: () => OracleAccess;
 }
 
+/**
+ * One immutable normalized reading of a claim line, produced by its form's `parse` — the
+ * ONLY value the shared plumbing (ledger, novelty, tree, contracts, record identity) knows
+ * a claim by. Boundary-family consumers (atlas, promise, panel rows, renderers) still use
+ * the typed parseBoundary/parseParity: those features grade the boundary CONCEPT, and an
+ * abstraction from that single example would be a guess. This value is the deliberate
+ * generic half of that split.
+ */
+export interface ParsedClaim {
+  form: string;                              // registry form name ("boundary", "exists", …)
+  key: string;                               // temporal identity within a component (ledger)
+  anchors: readonly string[];                // invariants this claim anchors ([] = not an anchor)
+  symbols: readonly string[];                // code-graph symbols the claim names
+  files: readonly string[];                  // file tokens the claim blesses (tree coverage)
+  record: string;                            // record-lookup text (declarative clauses stripped)
+  detail: Readonly<Record<string, string>>;  // named non-identity fields; a change = REWIRED
+}
+
+/** Build a frozen ParsedClaim. Every field defaults to the plainest reading — key/record =
+ *  the verbatim line, everything else empty — so a simple form overrides nothing. */
+const claimOf = (
+  form: string,
+  line: string,
+  over: { key?: string; anchors?: string[]; symbols?: string[]; files?: string[]; record?: string; detail?: Record<string, string> } = {},
+): ParsedClaim => Object.freeze({
+  form,
+  key: over.key ?? line,
+  anchors: Object.freeze(over.anchors ?? []),
+  symbols: Object.freeze(over.symbols ?? []),
+  files: Object.freeze(over.files ?? []),
+  record: over.record ?? line,
+  detail: Object.freeze(over.detail ?? {}),
+});
+
 export interface ClaimForm {
   name: string;
   /** human-readable grammar, for the phrasebook table / README authority. */
   grammar: string;
   example: string;
   tier: "deterministic" | "live" | "executable" | "hybrid";
-  match(line: string): RegExpMatchArray | null;
-  evaluate(ctx: ClaimCtx, m: RegExpMatchArray): ClaimResult | Promise<ClaimResult>;
+  parse(line: string): ParsedClaim | null;
+  evaluate(ctx: ClaimCtx, claim: ParsedClaim): ClaimResult | Promise<ClaimResult>;
+}
+
+/** First matching form wins — the order of CLAIM_FORMS IS the precedence. Null = no form
+ *  reads the line (verify's dialect-gap skip; a word commitment's RED). */
+export function parseClaim(line: string): { form: ClaimForm; claim: ParsedClaim } | null {
+  for (const form of CLAIM_FORMS) { const claim = form.parse(line); if (claim) return { form, claim }; }
+  return null;
+}
+
+/** THE ONE evaluation path — parse, anchor every claim.anchors (BEFORE evaluating, so an
+ *  invariant stays anchored even while its claim is red, exactly the historical behavior),
+ *  then evaluate. Used by verify's evalClaim AND the `conforms to` expansion loop; null =
+ *  no form matched, and each caller owns what that means (skip vs RED). */
+export function evaluateClaimLine(ctx: ClaimCtx, line: string): Promise<ClaimResult> | null {
+  const r = parseClaim(line);
+  if (!r) return null;
+  for (const inv of r.claim.anchors) ctx.anchor(inv);
+  return Promise.resolve(r.form.evaluate(ctx, r.claim));
 }
 
 // ── the dictionary word file ──────────────────────────────────────────────────────────
@@ -212,7 +264,7 @@ export const CLAIM_FORMS: ClaimForm[] = [
     grammar: "typechecks",
     example: "typechecks",
     tier: "deterministic",
-    match: (l) => l.match(/^typechecks$/),
+    parse: (l) => /^typechecks$/.test(l) ? claimOf("typechecks", l) : null,
     evaluate: (ctx) => { const t = ctx.typecheck(); return { kind: t.pass ? "pass" : "fail", detail: t.detail }; },
   },
   {
@@ -220,10 +272,13 @@ export const CLAIM_FORMS: ClaimForm[] = [
     grammar: "<file> exists at (root | this node | every node)",
     example: "wrangler.jsonc exists at root",
     tier: "deterministic",
-    match: (l) => l.match(/^(\S+)\s+exists at\s+(root|this node|every node)$/),
-    evaluate: async (ctx, m) => {
-      const base = m[2] === "root" ? ctx.root : ctx.nodeDir;
-      return { kind: (await fileExists(join(base, m[1]))) ? "pass" : "fail", detail: `${m[1]} @ ${m[2]}` };
+    parse: (l) => {
+      const m = /^(\S+)\s+exists at\s+(root|this node|every node)$/.exec(l);
+      return m ? claimOf("exists", l, { files: [m[1]], detail: { file: m[1], where: m[2] } }) : null;
+    },
+    evaluate: async (ctx, { detail: { file, where } }) => {
+      const base = where === "root" ? ctx.root : ctx.nodeDir;
+      return { kind: (await fileExists(join(base, file))) ? "pass" : "fail", detail: `${file} @ ${where}` };
     },
   },
   {
@@ -231,13 +286,16 @@ export const CLAIM_FORMS: ClaimForm[] = [
     grammar: "<file> imports <specifier>",
     example: "main.ts imports ./registry",
     tier: "deterministic",
-    match: (l) => l.match(/^(\S+)\s+imports\s+(\S+)$/),
-    evaluate: async (ctx, m) => {
+    parse: (l) => {
+      const m = /^(\S+)\s+imports\s+(\S+)$/.exec(l);
+      return m ? claimOf("imports", l, { files: [m[1]], detail: { file: m[1], specifier: m[2] } }) : null;
+    },
+    evaluate: async (ctx, { detail: { file, specifier } }) => {
       try {
-        const src = await readFile(join(ctx.nodeDir, m[1]), "utf8");
-        const re = new RegExp(`from\\s+["']${m[2].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']`);
-        return re.test(src) ? { kind: "pass", detail: "" } : { kind: "fail", detail: `no import of ${m[2]}` };
-      } catch { return { kind: "fail", detail: `cannot read ${m[1]}` }; }
+        const src = await readFile(join(ctx.nodeDir, file), "utf8");
+        const re = new RegExp(`from\\s+["']${reEscape(specifier)}["']`);
+        return re.test(src) ? { kind: "pass", detail: "" } : { kind: "fail", detail: `no import of ${specifier}` };
+      } catch { return { kind: "fail", detail: `cannot read ${file}` }; }
     },
   },
   {
@@ -245,13 +303,19 @@ export const CLAIM_FORMS: ClaimForm[] = [
     grammar: '<url> responds <status> [with "<text>"]',
     example: 'http://localhost:8787/health responds 200 with "ok"',
     tier: "live",
-    match: (l) => l.match(/^(\S+)\s+responds\s+(\d+)(?:\s+with\s+"(.*)")?$/),
-    evaluate: async (ctx, m) => {
+    parse: (l) => {
+      const m = /^(\S+)\s+responds\s+(\d+)(?:\s+with\s+"(.*)")?$/.exec(l);
+      if (!m) return null;
+      const detail: Record<string, string> = { url: m[1], status: m[2] };
+      if (m[3] !== undefined) detail.text = m[3];
+      return claimOf("responds", l, { detail });
+    },
+    evaluate: async (ctx, { detail: { url, status, text } }) => {
       if (ctx.fast) return { kind: "skip", detail: "live tier (--fast)" };
       try {
-        const res = await fetch(m[1]);
-        if (res.status !== Number(m[2])) return { kind: "fail", detail: `got ${res.status}` };
-        if (m[3]) { const bdy = await res.text(); if (!bdy.includes(m[3])) return { kind: "fail", detail: `body missing "${m[3]}"` }; }
+        const res = await fetch(url);
+        if (res.status !== Number(status)) return { kind: "fail", detail: `got ${res.status}` };
+        if (text) { const bdy = await res.text(); if (!bdy.includes(text)) return { kind: "fail", detail: `body missing "${text}"` }; }
         return { kind: "pass" };
       } catch { return { kind: "skip", detail: "unreachable" }; }
     },
@@ -261,11 +325,14 @@ export const CLAIM_FORMS: ClaimForm[] = [
     grammar: 'passes test "<name>"',
     example: 'passes test "write policy totality"',
     tier: "executable",
-    match: (l) => l.match(/^passes test\s+"(.+)"$/),
-    evaluate: (ctx, m) => {
+    parse: (l) => {
+      const m = /^passes test\s+"(.+)"$/.exec(l);
+      return m ? claimOf("passes test", l, { detail: { test: m[1] } }) : null;
+    },
+    evaluate: (ctx, { detail: { test } }) => {
       if (ctx.fast) return { kind: "skip", detail: "executable tier (--fast)" };
       if (!hasRunner(ctx)) return { kind: "skip", detail: "no test runner configured (config.test)" };
-      const r = execNamedTest(ctx, m[1]);
+      const r = execNamedTest(ctx, test);
       return r.ok ? { kind: "pass", ms: r.ms } : { kind: "fail", detail: r.detail, ms: r.ms };
     },
   },
@@ -274,16 +341,24 @@ export const CLAIM_FORMS: ClaimForm[] = [
     grammar: 'boundary "<invariant>" at <chokepoint> [crossing <zone> -> <zone>] [via (test|guard) "<oracle>"]',
     example: 'boundary "fail-closed writes" at applyWritePolicy crossing agent-mcp -> storage via test "write policy totality"',
     tier: "hybrid",
-    match: (l) => l.match(BOUNDARY_RE),
+    parse: (l) => {
+      const b = parseBoundary(l);
+      if (!b) return null;
+      const detail: Record<string, string> = { chokepoint: b.chokepoint };
+      if (b.verb) { detail.verb = b.verb; detail.oracle = b.oracle; }
+      if (b.crossing) { detail.crossingFrom = b.crossing.from; detail.crossingTo = b.crossing.to; }
+      // record strips the crossing clause: pure topology must not fork record identity
+      // (annotating a gate with a crossing must never orphan its verdict — see boundary.ts).
+      return claimOf("boundary", l, { key: b.inv, anchors: [b.inv], symbols: [b.chokepoint], record: normalizeBoundaryClaim(l), detail });
+    },
     // The anti-entropy ratchet. Asserts the four-part anatomy of a self-enforcing boundary:
-    // the invariant is named (and ANCHORED for the coverage gate), the chokepoint SYMBOL
-    // exists, and (if given) the oracle passes. `via test` additionally runs the META-ORACLE
-    // (live-domain analysis, even under --fast); `via guard` is exempt (source-property oracle).
-    // The optional `crossing` clause (groups 3/4) is PROMISE-GRAPH topology, not a runtime
-    // check — verify never evaluates it, so verb/oracle now read from groups 5/6.
-    evaluate: async (ctx, m) => {
-      const inv = m[1], sym = m[2], verb = m[5], test = m[6];
-      ctx.anchor(inv);
+    // the invariant is named (and ANCHORED for the coverage gate — by evaluateClaimLine, from
+    // claim.anchors), the chokepoint SYMBOL exists, and (if given) the oracle passes. `via
+    // test` additionally runs the META-ORACLE (live-domain analysis, even under --fast);
+    // `via guard` is exempt (source-property oracle). The optional `crossing` clause is
+    // PROMISE-GRAPH topology, not a runtime check — verify never evaluates it.
+    evaluate: async (ctx, claim) => {
+      const inv = claim.key, sym = claim.detail.chokepoint, verb = claim.detail.verb, test = claim.detail.oracle;
       if (!ctx.graph.nodes.some((n) => n.kind === "symbol" && n.label === sym)) return { kind: "fail", detail: `chokepoint symbol "${sym}" not found in the code graph` };
       if (!test) return { kind: "pass", detail: `${inv} @ ${sym} (no oracle)` };
       if (verb === "test" && ctx.cfg.oracleDomain !== false) {
@@ -315,8 +390,11 @@ export const CLAIM_FORMS: ClaimForm[] = [
     // the promise layer (`coherence contract`), which owns zones — NOT here. Registering it
     // is what keeps `lives in` from grading as U: an unregistered verb is a dialect-gap skip,
     // which would wrongly report the topology as an unread claim.
-    match: (l) => l.match(/^lives in\s+(\S+)$/),
-    evaluate: (_ctx, m) => ({ kind: "pass", detail: `resides in ${m[1]}` }),
+    parse: (l) => {
+      const m = /^lives in\s+(\S+)$/.exec(l);
+      return m ? claimOf("lives in", l, { detail: { zone: m[1] } }) : null;
+    },
+    evaluate: (_ctx, { detail: { zone } }) => ({ kind: "pass", detail: `resides in ${zone}` }),
   },
   {
     name: "parity",
@@ -331,10 +409,16 @@ export const CLAIM_FORMS: ClaimForm[] = [
     // META-ORACLE runs even under --fast (source analysis, like the boundary's): the
     // named describe must ENUMERATE the declared domain and DRIVE both projections —
     // a one-sided or sample-list oracle fails the claim rather than wearing the label.
-    match: (l) => l.match(PARITY_RE),
-    evaluate: async (ctx, m) => {
-      const inv = m[1], domain = m[2], f = m[3], g = m[4], oracle = m[5];
-      ctx.anchor(inv);
+    parse: (l) => {
+      const p = parseParity(l);
+      if (!p) return null;
+      return claimOf("parity", l, {
+        key: p.inv, anchors: [p.inv], symbols: [p.domain, p.f, p.g],
+        detail: { domain: p.domain, f: p.f, g: p.g, oracle: p.oracle },
+      });
+    },
+    evaluate: async (ctx, claim) => {
+      const inv = claim.key, { domain, f, g, oracle } = claim.detail;
       for (const s of [domain, f, g])
         if (!ctx.graph.nodes.some((n) => n.kind === "symbol" && n.label === s))
           return { kind: "fail", detail: `symbol "${s}" not found in the code graph` };
@@ -364,9 +448,11 @@ export const CLAIM_FORMS: ClaimForm[] = [
     // and aggregates. A word is a CONTRACT, so — unlike a free-form spec claim — a commitment
     // that matches no claim form goes RED rather than skipping, and a missing/unparseable word
     // file goes RED (the verb was recognized; a broken reference is not a dialect gap).
-    match: (l) => l.match(CONFORMS_RE),
-    evaluate: async (ctx, m) => {
-      const word = m[1];
+    parse: (l) => {
+      const m = CONFORMS_RE.exec(l);
+      return m ? claimOf("conforms to", l, { detail: { word: m[1] } }) : null;
+    },
+    evaluate: async (ctx, { detail: { word } }) => {
       if (ctx.wordStack.includes(word))
         return { kind: "fail", detail: `conforms-to cycle: ${[...ctx.wordStack, word].join(" → ")}` };
       if (ctx.wordStack.length >= MAX_CONFORMS_DEPTH)
@@ -383,11 +469,10 @@ export const CLAIM_FORMS: ClaimForm[] = [
       const child: ClaimCtx = { ...ctx, wordStack: [...ctx.wordStack, word] };
       let green = 0, skipped = 0;
       for (const commitment of w.commitments) {
-        let form: ClaimForm | null = null, cm: RegExpMatchArray | null = null;
-        for (const f of CLAIM_FORMS) { const mx = f.match(commitment); if (mx) { form = f; cm = mx; break; } }
-        if (!form || !cm)
+        const pending = evaluateClaimLine(child, commitment);
+        if (!pending)
           return { kind: "fail", detail: `word "${word}": commitment "${commitment}" matches no claim form (a word is a contract — no silent skips)` };
-        const r = await form.evaluate(child, cm);
+        const r = await pending;
         if (r.kind === "fail") return { kind: "fail", detail: `word "${word}": commitment "${commitment}" failed${r.detail ? ` — ${r.detail}` : ""}` };
         if (r.kind === "skip") skipped++; else green++;
       }

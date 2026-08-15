@@ -71,7 +71,7 @@ test("grammar — `lives in <zone>` is residence, and is a registered PASS form 
   // Registered in the phrasebook so verify grades it a PASS, not a skip (which would read as U).
   const form = CLAIM_FORMS.find((f) => f.name === "lives in");
   assert.ok(form, "a `lives in` claim form is registered");
-  const m = form!.match("lives in owner-trusted");
+  const m = form!.parse("lives in owner-trusted");
   assert.ok(m, "it matches a residence line");
   const r = await form!.evaluate({} as never, m!);
   assert.equal(r.kind, "pass", "residence verifies as a pass, so it never grades as U");
