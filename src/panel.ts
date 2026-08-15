@@ -20,8 +20,8 @@ import { watch, type FSWatcher } from "node:fs";
 import * as readline from "node:readline";
 import type { Config, Graph } from "./types.ts";
 import { buildGraph } from "./derive.ts";
-import { parseBoundary, claimKey } from "./boundary.ts";
-import { parseClaim } from "./phrasebook.ts";
+import { parseBoundary } from "./boundary.ts";
+import { claimKey, parseClaim } from "./phrasebook.ts";
 import { readStatus, gitStamp, indexClaimRecords, type StatusRecord, type ClaimRecord } from "./status.ts";
 import { spark, arrow } from "./drift.ts";
 

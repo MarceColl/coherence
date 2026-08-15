@@ -6,7 +6,8 @@
 // status file); the IO readers (zones off a spec) run against a temp project.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseBoundary, normalizeBoundaryClaim, claimKey, type ClaimKey } from "../src/boundary.ts";
+import { parseBoundary, normalizeBoundaryClaim } from "../src/boundary.ts";
+import { claimKey, type ClaimKey } from "../src/phrasebook.ts";
 import { parseZones } from "../src/walk.ts";
 import { CLAIM_FORMS } from "../src/phrasebook.ts";
 import { assemblePromiseModel, deriveGates, residenceOf, readZones } from "../src/promise.ts";

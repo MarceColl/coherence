@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import type { Config, Graph } from "./types.ts";
 import { evaluateClaimLine, proveSerialRunnerCanFail, type ClaimCtx } from "./phrasebook.ts";
 import { ownerOf, refutedInvariants } from "./walk.ts";
-import { claimKey } from "./boundary.ts";
+import { claimKey } from "./phrasebook.ts";
 import { recordVerify, readStatus, indexClaimRecords } from "./status.ts";
 import { readJournal } from "./decisions.ts";
 import { raiseFindings, formatRaise, type Finding } from "./raise.ts";
