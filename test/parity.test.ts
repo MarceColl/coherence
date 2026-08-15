@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { parseParity, PARITY_RE } from "../src/parity.ts";
+import { parseParity } from "../src/parity.ts";
 import { analyzeParityOracle } from "../src/oracle-domain.ts";
 import { runVerify } from "../src/verify.ts";
 import { tmpProject, cleanup, runCaptured, cfg, comp, sym, graph } from "./_helpers.ts";
@@ -31,7 +31,7 @@ test("parseParity — captures invariant, domain, both projections, and the orac
 
 test("parseParity — the via test clause is REQUIRED (agreement without an oracle is an empty attestation)", () => {
   assert.equal(parseParity('parity "x" over D between f and g'), null);
-  assert.equal(PARITY_RE.test('parity "x" over D between f and g via guard "g"'), false);
+  assert.equal(parseParity('parity "x" over D between f and g via guard "g"'), null);
 });
 
 // ── the parity meta-oracle ────────────────────────────────────────────────────────────

@@ -12,7 +12,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { Config } from "./types.ts";
-import { claimKey, type ClaimKey } from "./boundary.ts";
+import { claimKey, type ClaimKey } from "./phrasebook.ts";
 import { readJsonOrRefuse } from "./floor.ts";
 
 export interface ClaimRecord {

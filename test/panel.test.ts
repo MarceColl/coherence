@@ -68,6 +68,21 @@ test("buildModel — worst light wins: a fail reddens the component; unanchored 
   assert.equal(m.totals.fail, 1);
 });
 
+test("buildModel fallback — a parity-anchored invariant is not a gap (agrees with verify's gate)", () => {
+  // With no verify record the panel derives unanchored invariants itself. Verify's
+  // coverage gate counts a parity claim as an anchor exactly like a boundary (both
+  // declare ParsedClaim.anchors), so the fallback must too — it used to read only
+  // boundary claims and paint a parity-anchored tree red that verify calls coherent.
+  const g = graph([comp("a", {
+    label: "A", intent: "does a", why: "w", invariants: ["agreement"],
+    claims: ['parity "agreement" over D between f and g via test "t"'],
+  })]);
+  const m = buildModel(g, { version: 1 }, { commit: "aaaa111", dirty: false }, NOW);
+  const A = m.comps.find((c) => c.label === "A")!;
+  assert.deepEqual(A.unanchored, [], "the parity claim anchors it");
+  assert.notEqual(A.light, "fail");
+});
+
 test("buildModel — a record from before a boundary gained its crossing clause still lights the annotated row", () => {
   // Same amnesia class as the merge: the panel's record lookup was raw-string keyed, so a
   // purely declarative `crossing` annotation turned a claim's earned light into "none".

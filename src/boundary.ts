@@ -19,7 +19,10 @@
 // Capture groups: 1=invariant, 2=chokepoint symbol, 3=crossing-from, 4=crossing-to,
 // 5=verb (test|guard), 6=oracle name. Groups 3/4 are undefined when the crossing clause is
 // absent; groups 5/6 are undefined when the via clause is absent.
-export const BOUNDARY_RE =
+import { analyzeOracle } from "./oracle-domain.ts";
+import { claimOf, execNamedTest, hasRunner, type ClaimForm } from "./claims/shared.ts";
+
+const BOUNDARY_RE =
   /^boundary\s+"([^"]+)"\s+at\s+(\S+)(?:\s+crossing\s+(\S+)\s+->\s+(\S+))?(?:\s+via (test|guard)\s+"([^"]+)")?$/;
 
 /** A parsed boundary claim. `verb`/`oracle` are `""` when the claim has no `via` clause;
@@ -60,16 +63,49 @@ export function normalizeBoundaryClaim(claim: string): string {
   return `boundary "${m[1]}" at ${m[2]}${m[5] ? ` via ${m[5]} "${m[6]}"` : ""}`;
 }
 
-/** The BRAND that makes raw-string record lookup a compile error. Only `claimKey` can mint
- *  one, so a `Map<ClaimKey, …>` cannot be probed with `` `${node} ${claim}` `` — the exact
- *  bypass that let mergeClaimRecords/panel/verify forget a claim's failure history on pure
- *  crossing annotation while scene/promise remembered it. */
-declare const CLAIM_KEY_BRAND: unique symbol;
-export type ClaimKey = string & { readonly [CLAIM_KEY_BRAND]: true };
+// The record-lookup key (`claimKey`) that rode on normalizeBoundaryClaim lives in
+// phrasebook.ts now, generalized: every form states its own record identity through
+// ParsedClaim.record, and the boundary's crossing-strip is just this form's statement.
 
-/** The ONE record-lookup key EVERY consumer of `status.verify.claims` uses (store AND read)
- *  — the promise graph, the panel, the merge, and verify's decoration filter —
- *  so a pre-crossing record matches a post-crossing claim and vice versa. Returns the
- *  branded `ClaimKey`: there is no other way to mint one. */
-export const claimKey = (node: string, claim: string): ClaimKey =>
-  `${node} ${normalizeBoundaryClaim(claim)}` as ClaimKey;
+/** The boundary CLAIM FORM — the anti-entropy ratchet. Asserts the four-part anatomy of a
+ *  self-enforcing boundary: the invariant is named (and ANCHORED for the coverage gate —
+ *  by evaluateClaimLine, from claim.anchors), the chokepoint SYMBOL exists, and (if given)
+ *  the oracle passes. `via test` additionally runs the META-ORACLE (live-domain analysis,
+ *  even under --fast); `via guard` is exempt (source-property oracle). The optional
+ *  `crossing` clause is PROMISE-GRAPH topology, not a runtime check — verify never
+ *  evaluates it. */
+export const boundaryForm: ClaimForm = {
+  name: "boundary",
+  grammar: 'boundary "<invariant>" at <chokepoint> [crossing <zone> -> <zone>] [via (test|guard) "<oracle>"]',
+  example: 'boundary "fail-closed writes" at applyWritePolicy crossing agent-mcp -> storage via test "write policy totality"',
+  tier: "hybrid",
+  parse: (l) => {
+    const b = parseBoundary(l);
+    if (!b) return null;
+    const detail: Record<string, string> = { chokepoint: b.chokepoint };
+    if (b.verb) { detail.verb = b.verb; detail.oracle = b.oracle; }
+    if (b.crossing) { detail.crossingFrom = b.crossing.from; detail.crossingTo = b.crossing.to; }
+    // record strips the crossing clause: pure topology must not fork record identity
+    // (annotating a gate with a crossing must never orphan its verdict — see above).
+    return claimOf("boundary", l, { key: b.inv, anchors: [b.inv], symbols: [b.chokepoint], record: normalizeBoundaryClaim(l), detail });
+  },
+  evaluate: async (ctx, claim) => {
+    const inv = claim.key, sym = claim.detail.chokepoint, verb = claim.detail.verb, test = claim.detail.oracle;
+    if (!ctx.graph.nodes.some((n) => n.kind === "symbol" && n.label === sym)) return { kind: "fail", detail: `chokepoint symbol "${sym}" not found in the code graph` };
+    if (!test) return { kind: "pass", detail: `${inv} @ ${sym} (no oracle)` };
+    if (verb === "test" && ctx.cfg.oracleDomain !== false) {
+      const a = await analyzeOracle(ctx.cfg, test);
+      if (a.verdict === "literal")
+        return { kind: "fail", detail: `[oracle] "${test}" iterates a LITERAL domain (${a.detail}) — a sampling oracle, not totality. Derive its domain from the live SSOT behind \`${sym}\` (or, if it is a source-property guard, declare it \`via guard\` not \`via test\`).` };
+      if (a.verdict === "no-iteration")
+        return { kind: "fail", detail: `[oracle] "${test}" performs NO domain iteration (${a.detail}) — a source-grep / hand-enumerated cases, not totality. Loop the live domain behind \`${sym}\`, or — if it is a genuine source-property guard — declare it \`via guard "${test}"\` instead of \`via test\`.` };
+      if (a.verdict === "not-found")
+        return { kind: "fail", detail: `[oracle] "${test}" — no describe() with this EXACT title found, so the meta-oracle cannot analyze its domain (the runner alone would still pass on an it()-name match, silently skipping analysis). Anchor the claim to the oracle's exact describe title, or declare it \`passes test\`/\`via guard\` if it is not a domain totality.` };
+    }
+    if (ctx.fast) return { kind: "skip", detail: "boundary oracle (--fast)" };
+    if (!hasRunner(ctx)) return { kind: "skip", detail: "no test runner configured (config.test)" };
+    const r = execNamedTest(ctx, test);
+    if (!r.ok) return { kind: "fail", detail: r.detail, ms: r.ms };
+    return { kind: "pass", detail: `${inv} @ ${sym}${verb === "guard" ? " (source-property guard)" : ""}`, ms: r.ms };
+  },
+};

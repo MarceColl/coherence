@@ -52,7 +52,7 @@ _works when:_
 - boundary "activity evidence is accepted only when identity, scope, time, and command agree" at isActivityRow via guard "activity — internally inconsistent scope, time, and command rows are damage, not evidence"
 - boundary "a streamed journal entry renders exactly once across appends and compaction" at tailJournal via guard "tail — an appended record arrives exactly once, a compaction fold re-emits nothing and drops nothing, and a half-written line waits for its bytes"
 
-_files:_ `activity.ts`, `atlas.ts`, `boundary.ts`, `calibration.ts`, `cli.ts`, `commands.ts`, `config.ts`, `context.ts`, `contracts.ts`, `control.ts`, `conventions.ts`, `decisions.ts`, `decompose.ts`, `derive.ts`, `doctrine.ts`, `drift.ts`, `due.ts`, `economy.ts`, `evolution.ts`, `experiment.ts`, `floor.ts`, `hook-cli.ts`, `hooks.ts`, `index-model.ts`, `journal.ts`, `lint-sinks.ts`, `mass.ts`, `novelty.ts`, `observed.ts`, `oracle-domain.ts`, `panel.ts`, `parity.ts`, `phrasebook.ts`, `premise.ts`, `promise-model.ts`, `promise.ts`, `prose.ts`, `raise.ts`, `read-trace.ts`, `redundancy.ts`, `regulate.ts`, `render-claude.ts`, `render-contract.ts`, `render-index.ts`, `render-outline.ts`, `render-overview.ts`, `run-named-test.ts`, `scaffold.ts`, `sidecar.ts`, `signal.ts`, `status.ts`, `structural.ts`, `test-batch.ts`, `tree.ts`, `types.ts`, `verify.ts`, `walk.ts`, `why-lint.ts`
+_files:_ `activity.ts`, `atlas.ts`, `boundary.ts`, `calibration.ts`, `conforms-to.ts`, `exists.ts`, `imports.ts`, `lives-in.ts`, `passes-test.ts`, `responds.ts`, `shared.ts`, `typechecks.ts`, `cli.ts`, `commands.ts`, `config.ts`, `context.ts`, `contracts.ts`, `control.ts`, `conventions.ts`, `decisions.ts`, `decompose.ts`, `derive.ts`, `doctrine.ts`, `drift.ts`, `due.ts`, `economy.ts`, `evolution.ts`, `experiment.ts`, `floor.ts`, `hook-cli.ts`, `hooks.ts`, `index-model.ts`, `journal.ts`, `lint-sinks.ts`, `mass.ts`, `novelty.ts`, `observed.ts`, `oracle-domain.ts`, `panel.ts`, `parity.ts`, `phrasebook.ts`, `premise.ts`, `promise-model.ts`, `promise.ts`, `prose.ts`, `raise.ts`, `read-trace.ts`, `redundancy.ts`, `regulate.ts`, `render-claude.ts`, `render-contract.ts`, `render-index.ts`, `render-outline.ts`, `render-overview.ts`, `run-named-test.ts`, `scaffold.ts`, `sidecar.ts`, `signal.ts`, `status.ts`, `structural.ts`, `test-batch.ts`, `tree.ts`, `types.ts`, `verify.ts`, `walk.ts`, `why-lint.ts`
 
 ### Source adapters  `src/adapters`
 Translate language syntax and platform configuration into the common graph vocabulary consumed by the harness core.
@@ -88,6 +88,15 @@ coherence/
 │  │  ├─ cloudflare.ts
 │  │  ├─ python.ts
 │  │  └─ typescript.ts
+│  ├─ claims/
+│  │  ├─ conforms-to.ts
+│  │  ├─ exists.ts
+│  │  ├─ imports.ts
+│  │  ├─ lives-in.ts
+│  │  ├─ passes-test.ts
+│  │  ├─ responds.ts
+│  │  ├─ shared.ts
+│  │  └─ typechecks.ts
 │  ├─ activity.ts
 │  ├─ atlas.ts
 │  ├─ boundary.ts

@@ -27,7 +27,7 @@ import { readFile } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { createHash } from "node:crypto";
 import type { Config, GraphNode } from "./types.ts";
-import { parseBoundary } from "./boundary.ts";
+import { parseClaim } from "./phrasebook.ts";
 
 /** Per-file content STATS keyed by repo-relative path: the LINE count (honest mass) and a
  *  content HASH (the body-edit signal for any diff). Unreadable or binary (a NUL byte) →
@@ -61,10 +61,10 @@ const suffixMatch = (path: string, token: string): boolean => {
 };
 
 /** The ONE definition of which of a component's FILES a claim blesses — matched by PATH,
- *  blessing at MOST ONE file per claim token, NEVER over-reporting coverage. A file is
- *  named via `<file> exists at …` or `<file> imports …`; a boundary claim names a
- *  chokepoint SYMBOL (skipped here), and typechecks/passes test/responds/conforms name
- *  neither. The file token is resolved against the component's REAL paths:
+ *  blessing at MOST ONE file per claim token, NEVER over-reporting coverage. Which tokens
+ *  name a file is each claim form's own statement: ParsedClaim.files (exists/imports
+ *  today; a boundary names a chokepoint SYMBOL, so its files are empty). The token is
+ *  resolved against the component's REAL paths:
  *    · a token WITH a `/` → PATH-SUFFIX match (segments == the path's trailing segments);
  *    · a BARE basename    → matches only if EXACTLY ONE file carries that basename.
  *  Either way, if a token has several candidates it blesses NONE — a component with four
@@ -74,14 +74,12 @@ export function claimedFilePaths(claims: string[], files: GraphNode[]): Set<stri
   const paths = files.map((f) => f.path ?? f.label);
   const blessed = new Set<string>();
   for (const claim of claims) {
-    if (parseBoundary(claim)) continue;
-    const m = /^(\S+)\s+(?:exists at|imports)\b/.exec(claim);
-    if (!m) continue;
-    const token = m[1];
-    const cands = token.includes("/")
-      ? paths.filter((p) => suffixMatch(p, token))
-      : paths.filter((p) => basename(p) === token);
-    if (cands.length === 1) blessed.add(cands[0]);   // ambiguous (0 or >1) → bless nothing
+    for (const token of parseClaim(claim)?.claim.files ?? []) {
+      const cands = token.includes("/")
+        ? paths.filter((p) => suffixMatch(p, token))
+        : paths.filter((p) => basename(p) === token);
+      if (cands.length === 1) blessed.add(cands[0]);   // ambiguous (0 or >1) → bless nothing
+    }
   }
   return blessed;
 }

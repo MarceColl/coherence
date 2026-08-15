@@ -351,8 +351,8 @@ test("TRAJECTORY — the ledger counts LOSSES separately, and every list states 
   const s = structuralView(diffGraphs(before, after));
   assert.equal(s.invRemoved.total, 1);
   assert.equal(s.invAdded.total, 1);
-  assert.equal(s.boundaryRemoved.total, 1);
-  assert.equal(s.boundaryRewired.total, 1, "the kept invariant moved chokepoint — a rewire, not a loss");
+  assert.equal(s.anchorRemoved.total, 1);
+  assert.equal(s.anchorRewired.total, 1, "the kept invariant moved chokepoint — a rewire, not a loss");
   assert.equal(s.losses, 2, "a removed invariant AND its removed anchor are two losses");
   assert.ok(s.changes > s.losses);
 });
