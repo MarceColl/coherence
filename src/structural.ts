@@ -15,7 +15,7 @@ import { parseBoundary, type Boundary } from "./boundary.ts";
 import { loadConfig } from "./config.ts";
 import { buildGraph } from "./derive.ts";
 import { ownerOf } from "./walk.ts";
-import { CONFORMS_RE, dictionaryDir, parseClaim, parseWord, type ParsedClaim } from "./phrasebook.ts";
+import { conformsWord, dictionaryDir, parseClaim, parseWord, type ParsedClaim } from "./phrasebook.ts";
 import { noveltyVerdict, renderNovelty, scanSurface, surfaceSignals } from "./novelty.ts";
 import { Unrunnable } from "./floor.ts";
 import type { Config, Graph, GraphNode } from "./types.ts";
@@ -56,7 +56,7 @@ async function affectedWords(cfg: Config, changed: Set<string>): Promise<Set<str
     const base = f.replace(/\.md$/, "");
     const w = parseWord(await readFile(join(dir, f), "utf8").catch(() => ""));
     const set = new Set<string>();
-    for (const c of w?.commitments ?? []) { const m = CONFORMS_RE.exec(c); if (m) set.add(m[1]); }
+    for (const c of w?.commitments ?? []) { const ref = conformsWord(c); if (ref) set.add(ref); }
     refs.set(base, set);
   }
   const out = new Set(changed);
@@ -94,8 +94,8 @@ export async function affectedComponents(cfg: Config, graph: Graph, files: Set<s
     for (const n of graph.nodes)
       if (n.kind === "component")
         for (const cl of n.claims ?? []) {
-          const m = CONFORMS_RE.exec(cl);
-          if (m && words.has(m[1])) { hit.add(n.id.slice(2)); break; }
+          const w = conformsWord(cl);
+          if (w && words.has(w)) { hit.add(n.id.slice(2)); break; }
         }
   }
   return hit;

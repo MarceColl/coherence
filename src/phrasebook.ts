@@ -158,10 +158,17 @@ const MAX_CONFORMS_DEPTH = 16;
 /** A dictionary word plus the components that `conforms to` it — for the overview render. */
 export interface DictEntry { word: string; intent: string; conformers: string[] }
 
-/** The `conforms to <Word>` grammar — SINGLE HOME. Consumed by the claim form's `match`,
- *  the dictionary cross-reference in `loadDictionary`, and the `--staged`/`--since` word-edit
- *  propagation scope in structural.ts. Capture group 1 is the word token. */
-export const CONFORMS_RE = /^conforms to\s+([A-Za-z][A-Za-z0-9_-]*)$/;
+/** The `conforms to <Word>` grammar — SINGLE HOME, private: every consumer reads the word
+ *  through `conformsWord` (the registry's normalized reading), never the regex. */
+const CONFORMS_RE = /^conforms to\s+([A-Za-z][A-Za-z0-9_-]*)$/;
+
+/** The word a `conforms to <Word>` claim references, else null — the ONE cross-reference
+ *  reading shared by the dictionary listing (`loadDictionary`) and the `--staged`/`--since`
+ *  word-edit propagation scope (structural.ts). */
+export const conformsWord = (line: string): string | null => {
+  const r = parseClaim(line);
+  return r && r.claim.form === "conforms to" ? r.claim.detail.word : null;
+};
 
 /** Regex-escape a string so it matches literally when interpolated into a RegExp or passed
  *  to a test runner whose `-t <name>` treats the arg as a regex (vitest, jest). */
@@ -248,7 +255,7 @@ export async function loadDictionary(cfg: Config, graph: Graph): Promise<DictEnt
   // against), not the file's `# ` heading — those can differ; the token is what references it.
   const conformers = new Map<string, string[]>();
   for (const c of graph.nodes.filter((n) => n.kind === "component"))
-    for (const cl of c.claims ?? []) { const m = CONFORMS_RE.exec(cl); if (m) { const a = conformers.get(m[1]) ?? []; a.push(c.label); conformers.set(m[1], a); } }
+    for (const cl of c.claims ?? []) { const w = conformsWord(cl); if (w) { const a = conformers.get(w) ?? []; a.push(c.label); conformers.set(w, a); } }
   const entries: DictEntry[] = [];
   for (const f of files.sort()) {
     const base = f.replace(/\.md$/, "");

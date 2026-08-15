@@ -19,7 +19,7 @@
 // Capture groups: 1=invariant, 2=chokepoint symbol, 3=crossing-from, 4=crossing-to,
 // 5=verb (test|guard), 6=oracle name. Groups 3/4 are undefined when the crossing clause is
 // absent; groups 5/6 are undefined when the via clause is absent.
-export const BOUNDARY_RE =
+const BOUNDARY_RE =
   /^boundary\s+"([^"]+)"\s+at\s+(\S+)(?:\s+crossing\s+(\S+)\s+->\s+(\S+))?(?:\s+via (test|guard)\s+"([^"]+)")?$/;
 
 /** A parsed boundary claim. `verb`/`oracle` are `""` when the claim has no `via` clause;

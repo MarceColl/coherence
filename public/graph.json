@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-15 04:32Z",
+  "generatedAt": "2026-08-15 04:38Z",
   "root": "coherence",
   "absRoot": "/Users/marcecoll/proj/coherence",
   "nodes": [
@@ -467,16 +467,6 @@
       "kind": "file",
       "sub": "src/boundary.ts",
       "path": "src/boundary.ts",
-      "prose": "boundary.ts — the ONE home of the boundary-claim grammar.\n\n`boundary \"<invariant>\" at <chokepoint> [crossing <zone> -> <zone>] [via (test|guard) \"<oracle>\"]`\n\nThis regex used to live (identically, in intent) at three sites — structural.ts,\nverify.ts, and render-claude.ts — and the render-claude copy drifted: it matched\n`via test` only, so `via guard` boundaries silently vanished from the generated\nCLAUDE.md invariants table. One exported regex + one parser is the structural fix:\nthe grammar cannot drift again because it has nowhere else to live.\n\nThe OPTIONAL `crossing <from> -> <to>` clause states what wall (which pair of declared\ntrust zones) this gate sits on — the PROMISE GRAPH's topology axiom (a gate declares\nwhat it separates). It is purely declarative: verify ignores it (a crossing is not a\nruntime check), scene/atlas/structural read only the fields they already read, and every\npre-crossing spec parses UNCHANGED because both the crossing clause and the via clause\nare optional and independently absent. The clause sits BETWEEN chokepoint and via, so a\ngate may declare a crossing with or without an oracle, in any combination.\n\nCapture groups: 1=invariant, 2=chokepoint symbol, 3=crossing-from, 4=crossing-to,\n5=verb (test|guard), 6=oracle name. Groups 3/4 are undefined when the crossing clause is\nabsent; groups 5/6 are undefined when the via clause is absent."
-    },
-    {
-      "id": "s:src/boundary.ts#BOUNDARY_RE",
-      "parent": "f:src/boundary.ts",
-      "label": "BOUNDARY_RE",
-      "kind": "symbol",
-      "sub": "const",
-      "path": "src/boundary.ts",
-      "line": 22,
       "prose": "boundary.ts — the ONE home of the boundary-claim grammar.\n\n`boundary \"<invariant>\" at <chokepoint> [crossing <zone> -> <zone>] [via (test|guard) \"<oracle>\"]`\n\nThis regex used to live (identically, in intent) at three sites — structural.ts,\nverify.ts, and render-claude.ts — and the render-claude copy drifted: it matched\n`via test` only, so `via guard` boundaries silently vanished from the generated\nCLAUDE.md invariants table. One exported regex + one parser is the structural fix:\nthe grammar cannot drift again because it has nowhere else to live.\n\nThe OPTIONAL `crossing <from> -> <to>` clause states what wall (which pair of declared\ntrust zones) this gate sits on — the PROMISE GRAPH's topology axiom (a gate declares\nwhat it separates). It is purely declarative: verify ignores it (a crossing is not a\nruntime check), scene/atlas/structural read only the fields they already read, and every\npre-crossing spec parses UNCHANGED because both the crossing clause and the via clause\nare optional and independently absent. The clause sits BETWEEN chokepoint and via, so a\ngate may declare a crossing with or without an oracle, in any combination.\n\nCapture groups: 1=invariant, 2=chokepoint symbol, 3=crossing-from, 4=crossing-to,\n5=verb (test|guard), 6=oracle name. Groups 3/4 are undefined when the crossing clause is\nabsent; groups 5/6 are undefined when the via clause is absent."
     },
     {
@@ -1011,7 +1001,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/contracts.ts",
-      "line": 41
+      "line": 40
     },
     {
       "id": "f:src/control.ts",
@@ -3829,7 +3819,7 @@
       "kind": "symbol",
       "sub": "type",
       "path": "src/panel.ts",
-      "line": 29
+      "line": 30
     },
     {
       "id": "s:src/panel.ts#Light",
@@ -3838,7 +3828,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/panel.ts",
-      "line": 31
+      "line": 32
     },
     {
       "id": "s:src/panel.ts#BoundaryRow",
@@ -3847,7 +3837,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/panel.ts",
-      "line": 39
+      "line": 40
     },
     {
       "id": "s:src/panel.ts#PlainRow",
@@ -3856,7 +3846,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/panel.ts",
-      "line": 40
+      "line": 41
     },
     {
       "id": "s:src/panel.ts#CompRow",
@@ -3865,7 +3855,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/panel.ts",
-      "line": 42
+      "line": 43
     },
     {
       "id": "s:src/panel.ts#PanelModel",
@@ -3874,7 +3864,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/panel.ts",
-      "line": 51
+      "line": 52
     },
     {
       "id": "s:src/panel.ts#mastheadHeight",
@@ -3883,7 +3873,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/panel.ts",
-      "line": 71,
+      "line": 72,
       "prose": "How many rows the masthead occupies — 3, plus the ENERGY strip when the record carries\n cost or heat. Shared by the renderer and the interactive scroll math, which must agree\n about where the body starts or the cursor drifts out of the window by a row."
     },
     {
@@ -3893,7 +3883,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/panel.ts",
-      "line": 75
+      "line": 76
     },
     {
       "id": "s:src/panel.ts#lightFor",
@@ -3902,7 +3892,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/panel.ts",
-      "line": 92,
+      "line": 93,
       "prose": "A claim's light from its record. A PASS taken at another commit is STALE — last\n known green, honestly aged — never re-badged as current. FAIL/SKIP keep their kind\n (a fail from an old commit is still the worst known truth)."
     },
     {
@@ -3912,7 +3902,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/panel.ts",
-      "line": 102
+      "line": 103
     },
     {
       "id": "s:src/panel.ts#UIState",
@@ -3921,7 +3911,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/panel.ts",
-      "line": 178
+      "line": 181
     },
     {
       "id": "s:src/panel.ts#initialUI",
@@ -3930,7 +3920,7 @@
       "kind": "symbol",
       "sub": "const",
       "path": "src/panel.ts",
-      "line": 188
+      "line": 191
     },
     {
       "id": "s:src/panel.ts#sty",
@@ -3939,7 +3929,7 @@
       "kind": "symbol",
       "sub": "const",
       "path": "src/panel.ts",
-      "line": 196,
+      "line": 199,
       "prose": "Styling: tiny ANSI helpers, disabled wholesale for tests / non-TTY output. Padding\nhappens on plain text BEFORE color wrapping so escape codes never skew widths.\nExported for the journal stream (journal.ts), which is the panel's sibling TUI: two\nhand-rolled ANSI helpers is two chances for the padding-before-color rule to be\nforgotten in one of them."
     },
     {
@@ -3949,7 +3939,7 @@
       "kind": "symbol",
       "sub": "type",
       "path": "src/panel.ts",
-      "line": 200
+      "line": 203
     },
     {
       "id": "s:src/panel.ts#clip",
@@ -3958,7 +3948,7 @@
       "kind": "symbol",
       "sub": "const",
       "path": "src/panel.ts",
-      "line": 202
+      "line": 205
     },
     {
       "id": "s:src/panel.ts#padE",
@@ -3967,7 +3957,7 @@
       "kind": "symbol",
       "sub": "const",
       "path": "src/panel.ts",
-      "line": 203
+      "line": 206
     },
     {
       "id": "s:src/panel.ts#wrapText",
@@ -3976,7 +3966,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/panel.ts",
-      "line": 217
+      "line": 220
     },
     {
       "id": "s:src/panel.ts#renderFrame",
@@ -3985,7 +3975,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/panel.ts",
-      "line": 355,
+      "line": 358,
       "prose": "Assemble one full frame. Pure: no IO, no globals — testable, replayable."
     },
     {
@@ -3995,7 +3985,7 @@
       "kind": "symbol",
       "sub": "interface",
       "path": "src/panel.ts",
-      "line": 402
+      "line": 405
     },
     {
       "id": "s:src/panel.ts#runPanel",
@@ -4004,7 +3994,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/panel.ts",
-      "line": 404
+      "line": 407
     },
     {
       "id": "f:src/parity.ts",
@@ -4013,16 +4003,6 @@
       "kind": "file",
       "sub": "src/parity.ts",
       "path": "src/parity.ts",
-      "prose": "parity.ts — the ONE home of the parity-claim grammar (mirrors boundary.ts).\n\n`parity \"<invariant>\" over <domain> between <fnA> and <fnB> via test \"<oracle>\"`\n\nA parity claim declares that two functions are PROJECTIONS OF ONE ENUMERATED DOMAIN\nand must AGREE over it — the generalization of the boundary totality oracle from\nCOVERAGE (\"the chokepoint handles every member\") to AGREEMENT (\"f and g read every\nmember the same way\"). The canonical bug class it exists to kill: a live projection\nand a settled projection of the same tool/message vocabulary drifting apart, often\nacross deploy artifacts (a Worker function vs a browser table) where no single\nTypeScript compilation can see both sides.\n\nCapture groups: 1=invariant, 2=domain symbol, 3=fnA, 4=fnB, 5=oracle name.\nUnlike boundary's, the `via test` clause is REQUIRED: agreement is a semantic the\nproject must state (what \"equal\" means between two projections is domain knowledge),\nso a parity claim without an oracle would be an empty attestation."
-    },
-    {
-      "id": "s:src/parity.ts#PARITY_RE",
-      "parent": "f:src/parity.ts",
-      "label": "PARITY_RE",
-      "kind": "symbol",
-      "sub": "const",
-      "path": "src/parity.ts",
-      "line": 17,
       "prose": "parity.ts — the ONE home of the parity-claim grammar (mirrors boundary.ts).\n\n`parity \"<invariant>\" over <domain> between <fnA> and <fnB> via test \"<oracle>\"`\n\nA parity claim declares that two functions are PROJECTIONS OF ONE ENUMERATED DOMAIN\nand must AGREE over it — the generalization of the boundary totality oracle from\nCOVERAGE (\"the chokepoint handles every member\") to AGREEMENT (\"f and g read every\nmember the same way\"). The canonical bug class it exists to kill: a live projection\nand a settled projection of the same tool/message vocabulary drifting apart, often\nacross deploy artifacts (a Worker function vs a browser table) where no single\nTypeScript compilation can see both sides.\n\nCapture groups: 1=invariant, 2=domain symbol, 3=fnA, 4=fnB, 5=oracle name.\nUnlike boundary's, the `via test` clause is REQUIRED: agreement is a semantic the\nproject must state (what \"equal\" means between two projections is domain knowledge),\nso a parity claim without an oracle would be an empty attestation."
     },
     {
@@ -4172,14 +4152,14 @@
       "prose": "A dictionary word plus the components that `conforms to` it — for the overview render."
     },
     {
-      "id": "s:src/phrasebook.ts#CONFORMS_RE",
+      "id": "s:src/phrasebook.ts#conformsWord",
       "parent": "f:src/phrasebook.ts",
-      "label": "CONFORMS_RE",
+      "label": "conformsWord",
       "kind": "symbol",
       "sub": "const",
       "path": "src/phrasebook.ts",
-      "line": 164,
-      "prose": "The `conforms to <Word>` grammar — SINGLE HOME. Consumed by the claim form's `match`,\n the dictionary cross-reference in `loadDictionary`, and the `--staged`/`--since` word-edit\n propagation scope in structural.ts. Capture group 1 is the word token."
+      "line": 168,
+      "prose": "The word a `conforms to <Word>` claim references, else null — the ONE cross-reference\n reading shared by the dictionary listing (`loadDictionary`) and the `--staged`/`--since`\n word-edit propagation scope (structural.ts)."
     },
     {
       "id": "s:src/phrasebook.ts#reEscape",
@@ -4188,7 +4168,7 @@
       "kind": "symbol",
       "sub": "const",
       "path": "src/phrasebook.ts",
-      "line": 168,
+      "line": 175,
       "prose": "Regex-escape a string so it matches literally when interpolated into a RegExp or passed\n to a test runner whose `-t <name>` treats the arg as a regex (vitest, jest)."
     },
     {
@@ -4198,7 +4178,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/phrasebook.ts",
-      "line": 192,
+      "line": 199,
       "prose": "Resolve ONE named test — the shared executable arm of `passes test`,\n`boundary … via test`, and `parity … via test`. THE SINGLE FRONT DOOR: every runner\ninvocation coherence makes on a project's behalf goes through here, which is why\nbatching is a change to this one function rather than to three claim forms.\n\nTwo arms, one contract:\n  BATCH — a whole-suite report is available, so the answer is a lookup (`resolveFromBatch`).\n  PER-CLAIM — shell `config.test` with the name appended, regex-escaped for the runner's\n    `-t`; exit 0 alone is not trusted (`testMatch` requires positive evidence the named\n    test actually ran — an exit-0 runner that matched zero tests would otherwise pass a\n    renamed/deleted oracle).\n\nBoth arms require positive evidence and both go red on zero matches, so which one\nanswered is an operational detail, never a difference in what green means.\n\n`ms` — the claim's HOLDING COST, and ONLY the batch arm can report it. The report carries\nthe runner's own per-test durations, so a batched claim's cost is measured by the thing\nthat ran it. The serial arm returns none: what a wall clock sees there is a whole test-pool\nboot charged to whichever claim happened to trigger it, which is a fact about the profile,\nnot about the claim. Verify's own wall clock takes over when this is absent."
     },
     {
@@ -4208,7 +4188,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/phrasebook.ts",
-      "line": 203,
+      "line": 210,
       "prose": "The SERIAL arm of `execNamedTest`, factored so the canary below probes the EXACT code\n path a claim's verdict rides on — same spawn, same exit-code reading, same `testMatch`\n evidence rule. Exit 0 alone is not trusted: `testMatch` requires positive evidence the\n named test actually ran (a zero-match runner that exits 0 would otherwise pass a\n renamed/deleted oracle)."
     },
     {
@@ -4218,7 +4198,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/phrasebook.ts",
-      "line": 225,
+      "line": 232,
       "prose": "THE SERIAL CANARY — the repo's own doctrine applied to the instrument: a checker never\nobserved to fail has not been shown to be a checker. The batch path proves a vanished\noracle structurally (zero matches in the report is its own red); the serial path had to\nTRUST `config.test` + `testMatch`, on a runner class this repo has itself documented as\nun-guardable by testMatch (node:test multi-file: a real name and a name existing nowhere\nproduce byte-identical passing output — measured, test-batch.ts:110, types.ts).\n\nSo, once per serial verify, run the runner with a name that provably exists nowhere and\nrequire it to FAIL (nonzero exit, or a `testMatch` miss — the same reading a claim gets).\nA runner that PASSES the canary cannot filter by name: every green it would produce is\ngreen-by-absence, and verify must refuse it exactly as the batch path refuses. Cost is\none extra runner boot per serial run."
     },
     {
@@ -4228,7 +4208,7 @@
       "kind": "symbol",
       "sub": "function",
       "path": "src/phrasebook.ts",
-      "line": 243,
+      "line": 250,
       "prose": "Scan the dictionary dir + cross-reference the graph's `conforms to` claims. Empty when\n the project has no dictionary dir (so the overview's Dictionary section is omitted)."
     },
     {
@@ -4238,7 +4218,7 @@
       "kind": "symbol",
       "sub": "const",
       "path": "src/phrasebook.ts",
-      "line": 261
+      "line": 268
     },
     {
       "id": "f:src/premise.ts",
@@ -6286,7 +6266,7 @@
       "sub": "function",
       "path": "src/tree.ts",
       "line": 73,
-      "prose": "The ONE definition of which of a component's FILES a claim blesses — matched by PATH,\n blessing at MOST ONE file per claim token, NEVER over-reporting coverage. A file is\n named via `<file> exists at …` or `<file> imports …`; a boundary claim names a\n chokepoint SYMBOL (skipped here), and typechecks/passes test/responds/conforms name\n neither. The file token is resolved against the component's REAL paths:\n   · a token WITH a `/` → PATH-SUFFIX match (segments == the path's trailing segments);\n   · a BARE basename    → matches only if EXACTLY ONE file carries that basename.\n Either way, if a token has several candidates it blesses NONE — a component with four\n `hooks.ts` never reads 4/4 claimed off a single same-named claim. Every consumer reads\n this ONE set, so per-file flags and aggregate counts stay exactly consistent."
+      "prose": "The ONE definition of which of a component's FILES a claim blesses — matched by PATH,\n blessing at MOST ONE file per claim token, NEVER over-reporting coverage. Which tokens\n name a file is each claim form's own statement: ParsedClaim.files (exists/imports\n today; a boundary names a chokepoint SYMBOL, so its files are empty). The token is\n resolved against the component's REAL paths:\n   · a token WITH a `/` → PATH-SUFFIX match (segments == the path's trailing segments);\n   · a BARE basename    → matches only if EXACTLY ONE file carries that basename.\n Either way, if a token has several candidates it blesses NONE — a component with four\n `hooks.ts` never reads 4/4 claimed off a single same-named claim. Every consumer reads\n this ONE set, so per-file flags and aggregate counts stay exactly consistent."
     },
     {
       "id": "f:src/types.ts",
@@ -7724,15 +7704,9 @@
       "kind": "imports"
     },
     {
-      "id": "f:src/contracts.ts->f:src/structural.ts:imports",
+      "id": "f:src/contracts.ts->f:src/phrasebook.ts:imports",
       "source": "f:src/contracts.ts",
-      "target": "f:src/structural.ts",
-      "kind": "imports"
-    },
-    {
-      "id": "f:src/contracts.ts->f:src/parity.ts:imports",
-      "source": "f:src/contracts.ts",
-      "target": "f:src/parity.ts",
+      "target": "f:src/phrasebook.ts",
       "kind": "imports"
     },
     {
@@ -8204,9 +8178,9 @@
       "kind": "imports"
     },
     {
-      "id": "f:src/index-model.ts->f:src/boundary.ts:imports",
+      "id": "f:src/index-model.ts->f:src/phrasebook.ts:imports",
       "source": "f:src/index-model.ts",
-      "target": "f:src/boundary.ts",
+      "target": "f:src/phrasebook.ts",
       "kind": "imports"
     },
     {
@@ -8483,6 +8457,12 @@
       "id": "f:src/panel.ts->f:src/boundary.ts:imports",
       "source": "f:src/panel.ts",
       "target": "f:src/boundary.ts",
+      "kind": "imports"
+    },
+    {
+      "id": "f:src/panel.ts->f:src/phrasebook.ts:imports",
+      "source": "f:src/panel.ts",
+      "target": "f:src/phrasebook.ts",
       "kind": "imports"
     },
     {
@@ -9158,9 +9138,9 @@
       "kind": "imports"
     },
     {
-      "id": "f:src/tree.ts->f:src/boundary.ts:imports",
+      "id": "f:src/tree.ts->f:src/phrasebook.ts:imports",
       "source": "f:src/tree.ts",
-      "target": "f:src/boundary.ts",
+      "target": "f:src/phrasebook.ts",
       "kind": "imports"
     },
     {

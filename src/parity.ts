@@ -14,7 +14,7 @@
 // Unlike boundary's, the `via test` clause is REQUIRED: agreement is a semantic the
 // project must state (what "equal" means between two projections is domain knowledge),
 // so a parity claim without an oracle would be an empty attestation.
-export const PARITY_RE =
+const PARITY_RE =
   /^parity\s+"([^"]+)"\s+over\s+(\S+)\s+between\s+(\S+)\s+and\s+(\S+)\s+via test\s+"([^"]+)"$/;
 
 /** A parsed parity claim. */
