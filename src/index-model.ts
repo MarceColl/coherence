@@ -66,7 +66,7 @@ import { buildPromiseModel } from "./promise.ts";
 import { isDocumented } from "./derive.ts";
 import { claimedFilePaths } from "./tree.ts";
 import { refutedInvariants } from "./walk.ts";
-import { parseBoundary } from "./boundary.ts";
+import { parseClaim } from "./phrasebook.ts";
 import { readStatus, gitStamp, type StatusRecord, type AtlasSection } from "./status.ts";
 import { readJournal, resolve as resolveJournal, type DecisionRecord } from "./decisions.ts";
 import { readCommitLog, fileChurn, gitPrefix, rebaseCommits, CHURN_WINDOW } from "./evolution.ts";
@@ -664,7 +664,7 @@ export function buildMap(
   const components: IndexComponent[] = promise.components.map((pc) => {
     const node = nodeByDir.get(pc.dir);
     const witnessed = refutedInvariants(node?.refutations);
-    const anchoredInv = new Set((node?.claims ?? []).map(parseBoundary).filter(Boolean).map((b) => b!.inv));
+    const anchoredInv = new Set((node?.claims ?? []).flatMap((cl) => parseClaim(cl)?.claim.anchors ?? []));
     const invs = node?.invariants ?? [];
     const g = ZERO_GRADES();
     let breaches = 0;

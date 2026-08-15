@@ -21,6 +21,7 @@ import * as readline from "node:readline";
 import type { Config, Graph } from "./types.ts";
 import { buildGraph } from "./derive.ts";
 import { parseBoundary, claimKey } from "./boundary.ts";
+import { parseClaim } from "./phrasebook.ts";
 import { readStatus, gitStamp, indexClaimRecords, type StatusRecord, type ClaimRecord } from "./status.ts";
 import { spark, arrow } from "./drift.ts";
 
@@ -113,7 +114,9 @@ export function buildModel(graph: Graph, status: StatusRecord, head: { commit: s
     for (const g of status.verify.invariants.gaps) gapsByComp.set(g.comp, [...(gapsByComp.get(g.comp) ?? []), g.inv]);
   } else {
     for (const c of comps) {
-      const anchored = new Set((c.claims ?? []).map(parseBoundary).filter(Boolean).map((b) => b!.inv));
+      // Anchors as verify's gate counts them: ANY claim form declaring ParsedClaim.anchors
+      // (boundary AND parity) — the fallback must agree with the gate it stands in for.
+      const anchored = new Set((c.claims ?? []).flatMap((cl) => parseClaim(cl)?.claim.anchors ?? []));
       const gaps = (c.invariants ?? []).filter((i) => !anchored.has(i));
       if (gaps.length) gapsByComp.set(c.label, gaps);
     }
