@@ -74,6 +74,8 @@ test("a code identifier is never a candidate unless it is declared and prose rec
         "",
       ].join("\n"),
     );
+    // A type body in code no adapter language claims is not read as TypeScript's: its field is no declared name.
+    writeFileSync(join(root, "books/legacy.go"), ["export interface Legacy {", "  auditor: string;", "}", ""].join("\n"));
     // Prose writes "roster", "owner" and "tally marks" as words on many lines in every component; only declared names may surface.
     for (const c of COMPONENTS)
       writeFileSync(
@@ -85,6 +87,9 @@ test("a code identifier is never a candidate unless it is declared and prose rec
           "The owner reconciles it weekly, and tally marks are erased.",
           "Work order w-947cd2be and decision d-4a122d41 touched `.venv/bin/python` and `[a-z]` in src/books/roster.ts.",
           "Session 0e4a21bf-165b-4cef-8131-e66f7d90d073 read `a-z` and `readFileSync` again.",
+          "The auditor reads the roster.",
+          "An auditor signs each closed roster.",
+          "No auditor edits the roster.",
           "",
         ].join("\n"),
       );
@@ -92,6 +97,7 @@ test("a code identifier is never a candidate unless it is declared and prose rec
     const found = candidates(report);
     assert.ok(found.includes("roster"), `a declared name recurring in prose is a candidate: ${found.join(", ")}`);
     assert.ok(found.includes("owner"), `a declared field recurring in prose is a candidate: ${found.join(", ")}`);
+    assert.ok(!found.includes("auditor"), `a field in a file no adapter language claims is never read as declared: ${found.join(", ")}`);
     for (const never of ["tally marks", "tally", "marks", "read file sync", "deep equal", "roster balance sync", "balance", "sync", "a z", "venv", "bin python", "readfilesync"])
       assert.ok(!terms(report).includes(never), `"${never}" is a local, a split identifier, or a fragment, never a term`);
     for (const t of terms(report)) {

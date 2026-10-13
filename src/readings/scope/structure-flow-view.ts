@@ -42,7 +42,7 @@
  */
 
 import { componentId, invariantId, latestOf, plural, relianceOf, type RelianceSite } from "./derive.ts";
-import { CANDIDATE_RULES, NOT_DETECTED, groupLine } from "./entrance-coverage.ts";
+import { candidateRulesOf, groupLine, notDetectedOf } from "./entrance-coverage.ts";
 import { html, join, raw, slug, type Markup } from "./html.ts";
 import { renderEnforcement, renderRefutation } from "./invariants-view.ts";
 import type { LatestEntry, ShellState, StructurePreview } from "./model.ts";
@@ -2085,12 +2085,12 @@ function renderCoverage(model: FlowModel): Markup {
   const covered = coverage.individually + coverage.grouped;
   // Each language read, by its own rules.
   const languages = model.languages?.read ?? [model.language ?? ""];
-  const rules = languages.flatMap((language) => CANDIDATE_RULES[language] ?? []);
+  const rules = languages.flatMap((language) => candidateRulesOf(language));
   return html`<details class="flow-coverage" data-field="entrance-coverage" data-detected="${String(coverage.detected)}" data-covered="${String(covered)}" data-undeclared="${String(coverage.uncovered.length)}">
     <summary><span class="flow-coverage-title">Entrances</span> ${String(coverage.declared)} declared, covering ${String(covered)} of ${plural(coverage.detected, "detected entrance", "detected entrances")}${coverage.groups.length === 0 ? "" : `, ${coverage.grouped} of them through ${plural(coverage.groups.length, "grouped entrance", "grouped entrances")}`}; <span class="${coverage.uncovered.length === 0 ? "flow-meta" : "flow-attention"}" data-field="undeclared">${String(coverage.uncovered.length)} undeclared</span></summary>
     ${coverage.groups.length === 0 ? null : html`<ul class="flow-rows" data-field="coverage-groups">${coverage.groups.map((g) => html`<li class="flow-row" data-entrance="${g.name}" data-covers="${String(g.covers)}"><span>${groupLine(g)}</span></li>`)}</ul>`}
     ${coverage.uncovered.length === 0 ? null : html`<ul class="flow-rows" data-field="coverage-undeclared">${coverage.uncovered.map((c) => html`<li class="flow-row" data-rule="${c.rule}"><code>${c.file}:${String(c.line)}</code>${c.symbol === "" ? null : html` <span>${c.symbol}</span>`}<span class="flow-meta">${c.rule}: ${c.why}</span></li>`)}</ul>`}
-    <p class="flow-meta" data-field="coverage-rules">${coverage.beyond === 0 ? "" : `${plural(coverage.beyond, "declared entrance covers", "declared entrances cover")} nothing detected: declared where the rules do not reach, or finer than they detect. `}Detected by ${rules.length === 0 ? "no rule for this language" : rules.map((r) => r.rule).join(", ")}; ${languages.map((l) => NOT_DETECTED[l] ?? "").filter((t) => t !== "").join("; ")}.</p>
+    <p class="flow-meta" data-field="coverage-rules">${coverage.beyond === 0 ? "" : `${plural(coverage.beyond, "declared entrance covers", "declared entrances cover")} nothing detected: declared where the rules do not reach, or finer than they detect. `}Detected by ${rules.length === 0 ? "no rule for this language" : rules.map((r) => r.rule).join(", ")}; ${languages.map((l) => notDetectedOf(l) ?? "").filter((t) => t !== "").join("; ")}.</p>
   </details>`;
 }
 

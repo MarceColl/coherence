@@ -41,8 +41,11 @@
 
 import { isAbsolute } from "node:path";
 import { isLanguage, LANGUAGES, type Language } from "../adapters/index.ts";
+import { languageOfFile } from "../adapters/language-files.ts";
 import { effectiveConfig, type SetupKey } from "../adapters/project-config.ts";
 import { FROM_FORM, parseFrom, type ChokepointFrom } from "../spec/grammar.ts";
+
+export { languageOfFile } from "../adapters/language-files.ts";
 
 export const CONFIG_FILE = "coherence.config.json";
 export const DEFAULT_TEST_FOLDERS: readonly string[] = ["__tests__", "test", "tests"];
@@ -87,13 +90,6 @@ function commandValue(value: unknown): string[] | string | undefined {
   if (Array.isArray(value) && value.every((v): v is string => typeof v === "string") && value.length > 0) return value;
   if (typeof value === "string" && value.trim() !== "") return value;
   return undefined;
-}
-
-/** The language a file is written in, by its extension, among the languages given; undefined for any other file. */
-export function languageOfFile(file: string, languages: readonly Language[] = LANGUAGES): Language | undefined {
-  const base = file.trim();
-  const found: Language | undefined = /\.pyi?$/.test(base) ? "python" : /\.(?:[cm]?[tj]sx?)$/.test(base) && !/\.d\.ts$/.test(base) ? "typescript" : undefined;
-  return found !== undefined && languages.includes(found) ? found : undefined;
 }
 
 /** A file glob as a regular expression: `**` crosses folders, `*` and `?` stay within one. */

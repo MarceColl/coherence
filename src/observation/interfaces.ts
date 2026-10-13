@@ -21,6 +21,8 @@ import { componentOf, declarationsOf, isTest, sourceFiles } from "../economy/sou
 import type { EnforcementConfig } from "../enforcement/config.ts";
 import type { Language } from "../adapters/index.ts";
 import type { SpecModel } from "../spec/model.ts";
+import { pythonDeclares } from "./python-interfaces.ts";
+import { typescriptDeclares } from "./typescript-interfaces.ts";
 
 export interface InterfaceSite {
   file: string;
@@ -67,21 +69,15 @@ export function interfaceId(from: string, to: string): string {
   return `${from} -> ${to}`;
 }
 
+/** Each language's reading of what a declaration line's keyword says can execute: a language with none fails to compile. */
+const DECLARES: Record<Language, (line: string) => InterfaceSymbol["declares"]> = {
+  typescript: typescriptDeclares,
+  python: pythonDeclares,
+};
+
 /** What a declaration line's keyword says can execute. */
-export function declares(line: string, language: string): InterfaceSymbol["declares"] {
-  if (language === "python") return /^\s*(?:async\s+)?(?:def|class)\s/.test(line) ? "body" : "value";
-  const m = /^\s*(?:export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(function\*?|const|let|var|class|interface|type|enum|namespace)\s/.exec(line);
-  const keyword = m?.[1];
-  if (keyword === "interface" || keyword === "type") return "type";
-  if (keyword === "enum" || keyword === "namespace") return "value";
-  if (keyword === "const" || keyword === "let" || keyword === "var") {
-    const value = /=\s*(.*)$/.exec(line)?.[1]?.trim() ?? "";
-    if (/^(async\s+)?(function\b|class\b|\(|[A-Za-z_$][\w$]*\s*=>)/.test(value)) return "body";
-    if (/^([{["'`\d-]|new\s|true\b|false\b|null\b|undefined\b|Symbol\()/.test(value) || value === "") return "value";
-    // Anything else (a call's result, an identifier) may hold a function: counted as able to execute, so never read as bodiless.
-    return "unknown";
-  }
-  return "body";
+export function declares(line: string, language: Language): InterfaceSymbol["declares"] {
+  return DECLARES[language](line);
 }
 
 
