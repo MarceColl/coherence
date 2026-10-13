@@ -35,7 +35,7 @@ import {
 } from "../scope/derive.ts";
 import { CORE_RULE, DEFAULT_RULE, NO_CONTROL_NEEDED, NO_TRACED_CONTROL, ROUTE_RULE, CONTROL_WORDS, controlInWords, flowBoundsText, unreadLanguagesText, flowDefaultSelection, flowLabelLines, flowOf, flowPartialText, routeName, trustInWords } from "../scope/structure-flow.ts";
 import type { FlowModel } from "../scope/structure-flow.ts";
-import { CANDIDATE_RULES, NOT_DETECTED, coverageLine, groupLine } from "../scope/entrance-coverage.ts";
+import { candidateRulesOf, coverageLine, groupLine, notDetectedOf } from "../scope/entrance-coverage.ts";
 import { renderOrder } from "../../journal/workVerbs.ts";
 import { BUDGET_FLAGS } from "../scope/component-interfaces.ts";
 import { lexiconReviewCommand } from "../scope/model.ts";
@@ -281,8 +281,8 @@ function coverageLines(model: FlowModel): string[] {
   for (const c of coverage.uncovered) lines.push(`    ${c.file}:${c.line}  ${c.symbol === "" ? "(the file)" : c.symbol}  ${c.rule}: ${c.why}`);
   // Each language read, by its own rules.
   for (const language of model.languages?.read ?? [model.language ?? ""]) {
-    const rules = CANDIDATE_RULES[language] ?? [];
-    if (rules.length > 0) lines.push(`  detected by (${language}): ${rules.map((r) => `${r.rule}, ${r.detects}`).join("; ")}; ${NOT_DETECTED[language]}`);
+    const rules = candidateRulesOf(language);
+    if (rules.length > 0) lines.push(`  detected by (${language}): ${rules.map((r) => `${r.rule}, ${r.detects}`).join("; ")}; ${notDetectedOf(language)}`);
   }
   return lines;
 }

@@ -89,10 +89,16 @@ function commandValue(value: unknown): string[] | string | undefined {
   return undefined;
 }
 
+/** The file names each language is written in, by extension; no two languages share one, and a declaration file is no language's. */
+const LANGUAGE_FILES: Record<Language, RegExp> = {
+  typescript: /^(?!.*\.d\.ts$).*\.(?:[cm]?[tj]sx?)$/,
+  python: /\.pyi?$/,
+};
+
 /** The language a file is written in, by its extension, among the languages given; undefined for any other file. */
 export function languageOfFile(file: string, languages: readonly Language[] = LANGUAGES): Language | undefined {
   const base = file.trim();
-  const found: Language | undefined = /\.pyi?$/.test(base) ? "python" : /\.(?:[cm]?[tj]sx?)$/.test(base) && !/\.d\.ts$/.test(base) ? "typescript" : undefined;
+  const found = LANGUAGES.find((language) => LANGUAGE_FILES[language].test(base));
   return found !== undefined && languages.includes(found) ? found : undefined;
 }
 

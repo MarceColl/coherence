@@ -22,10 +22,11 @@
  */
 
 import type { EntranceCandidate } from "../../adapters/entrance-candidates.ts";
+import type { Language } from "../../adapters/index.ts";
 import type { SpecComponent } from "./model.ts";
 
 /** The rules, per language, each with its plural and what it detects: the documentation the query prints and the spec states, and the one place a rule's plural is said. */
-export const CANDIDATE_RULES: Record<string, readonly { rule: string; plural: string; detects: string }[]> = {
+export const CANDIDATE_RULES: Record<Language, readonly { rule: string; plural: string; detects: string }[]> = {
   typescript: [
     { rule: "server function", plural: "server functions", detects: "an exported const created by createServerFn (TanStack Start)" },
     { rule: "wrapped export", plural: "wrapped exports", detects: "an exported const created by calling a symbol a declared entrance names as its handler or guard" },
@@ -52,10 +53,22 @@ export const CANDIDATE_RULES: Record<string, readonly { rule: string; plural: st
 };
 
 /** What the rules do not see, per language: said wherever the coverage is, so an absence is never read as none. */
-export const NOT_DETECTED: Record<string, string> = {
+export const NOT_DETECTED: Record<Language, string> = {
   typescript: "file routes outside a Next.js app/**/page without server handlers (their work enters through server functions), hand-written dispatchers, message consumers, workers and host callbacks are not detected",
   python: "views reached only through include(), hand-written dispatchers, message consumers and signal handlers are not detected",
 };
+
+/** A recorded reading's language, by name: its rules, or none for a name no language goes by. */
+export function candidateRulesOf(language: string): readonly { rule: string; plural: string; detects: string }[] {
+  const rules: Partial<Record<string, readonly { rule: string; plural: string; detects: string }[]>> = CANDIDATE_RULES;
+  return rules[language] ?? [];
+}
+
+/** A recorded reading's language, by name: what its rules do not see, or nothing for a name no language goes by. */
+export function notDetectedOf(language: string): string | undefined {
+  const said: Partial<Record<string, string>> = NOT_DETECTED;
+  return said[language];
+}
 
 export interface CoverageGroup {
   /** The folder of the component whose spec declares it. */

@@ -6,12 +6,13 @@
  * references, and mass says when a number came from the scan alone.
  */
 
-import { existsSync, statSync } from "node:fs";
-import { isAbsolute, posix, relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { isTestPath } from "../adapters/adapter.ts";
 import { walkBounds, walkedProjectFiles } from "../adapters/project-files.ts";
 import type { Language } from "../adapters/index.ts";
 import type { Component, SpecModel } from "../spec/model.ts";
+import { PYTHON_SOURCE } from "./python-source.ts";
+import { TYPESCRIPT_SOURCE } from "./typescript-source.ts";
 
 const EXTENSIONS: Record<Language, readonly string[]> = {
   typescript: [".ts", ".tsx", ".mts", ".cts"],
@@ -40,6 +41,31 @@ export function toRelative(root: string, path: string): string | undefined {
   return rel;
 }
 
+/**
+ * What the plain scan reads of one language's source, each language's in its
+ * own module (typescript-source.ts, python-source.ts): a language
+ * SOURCE_SYNTAX lacks fails to compile, never reads as another language.
+ */
+export interface SourceSyntax {
+  /** The name a line declares at the top level and whether its file exports it, or undefined when it declares none. */
+  declarationOf(line: string): { name: string; exported: boolean } | undefined;
+  /** resolveModule for the language. */
+  resolveModule(root: string, from: string, specifier: string, vanished: ReadonlySet<string>): string | undefined;
+  /** Hands `add` each name the text imports with the specifier it comes from: undefined for a whole-module import. */
+  importsOf(text: string, add: (name: string | undefined, specifier: string) => void): void;
+}
+
+/**
+ * Each language's source scan: one key per language, so a new one is one
+ * module and one key here. Read at call time: typescript-source.ts imports
+ * toRelative and isSourceFile from here, so a table filled at load would read
+ * a module that has not run yet whenever that one is loaded first.
+ */
+const SOURCE_SYNTAX: Record<Language, () => SourceSyntax> = {
+  typescript: () => TYPESCRIPT_SOURCE,
+  python: () => PYTHON_SOURCE,
+};
+
 export interface Declaration {
   name: string;
   /** One-based. */
@@ -47,33 +73,17 @@ export interface Declaration {
   exported: boolean;
 }
 
-const TS_DECLARATION = /^(export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:function\*?|const|let|var|class|interface|type|enum|namespace)\s+([A-Za-z_$][\w$]*)/;
-const PY_DECLARATION = /^(?:async\s+)?(?:def|class)\s+([A-Za-z_]\w*)|^([A-Z_][A-Z0-9_]*)\s*(?::[^=]+)?=/;
-
 /** The top-level names a file declares, by a plain scan of line starts. */
 export function declarationsOf(text: string, language: Language): Declaration[] {
   const found: Declaration[] = [];
   const seen = new Set<string>();
+  const syntax = SOURCE_SYNTAX[language]();
   text.split("\n").forEach((raw, index) => {
     const line = raw.replace(/\r$/, "");
-    let name: string | undefined;
-    let exported = false;
-    if (language === "typescript") {
-      const m = TS_DECLARATION.exec(line);
-      if (m !== null) {
-        name = m[2];
-        exported = m[1] !== undefined;
-      }
-    } else {
-      const m = PY_DECLARATION.exec(line);
-      if (m !== null) {
-        name = m[1] ?? m[2];
-        exported = !(name ?? "").startsWith("_");
-      }
-    }
-    if (name === undefined || seen.has(name)) return;
-    seen.add(name);
-    found.push({ name, line: index + 1, exported });
+    const declared = syntax.declarationOf(line);
+    if (declared === undefined || seen.has(declared.name)) return;
+    seen.add(declared.name);
+    found.push({ name: declared.name, line: index + 1, exported: declared.exported });
   });
   return found;
 }
@@ -87,13 +97,6 @@ export interface Import {
 
 const NONE: ReadonlySet<string> = new Set();
 
-const TS_NAMED = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
-const TS_DEFAULT = /import\s+(?:type\s+)?([A-Za-z_$][\w$]*)\s*(?:,\s*\{[^}]*\})?\s*from\s*["']([^"']+)["']/g;
-const TS_NAMESPACE = /import\s+(?:type\s+)?\*\s+as\s+[A-Za-z_$][\w$]*\s+from\s*["']([^"']+)["']/g;
-const TS_SIDE = /(?:^|\n)\s*import\s*["']([^"']+)["']/g;
-const PY_FROM = /^from\s+([\w.]+)\s+import\s+([^\n]+)$/gm;
-const PY_IMPORT = /^import\s+([\w.]+)/gm;
-
 /**
  * Resolve a module specifier from a file to a project-relative source file,
  * or undefined for a package or a file not under the root. A path in
@@ -101,29 +104,7 @@ const PY_IMPORT = /^import\s+([\w.]+)/gm;
  * though it were still on disk, so its importers can be found.
  */
 export function resolveModule(root: string, from: string, specifier: string, language: Language, vanished: ReadonlySet<string> = NONE): string | undefined {
-  if (language === "python") {
-    const dots = /^(\.*)(.*)$/.exec(specifier)!;
-    const up = dots[1]!.length;
-    const parts = dots[2] === "" ? [] : dots[2]!.split(".");
-    let base = posix.dirname(from);
-    for (let i = 1; i < up; i++) base = posix.dirname(base);
-    const candidates = up === 0 ? [posix.join(...parts) + ".py", posix.join(...parts, "__init__.py")] : [posix.join(base, ...parts) + ".py", posix.join(base, ...parts, "__init__.py")];
-    return candidates.find((c) => vanished.has(c) || existsSync(resolve(root, c)));
-  }
-  if (!specifier.startsWith(".")) return undefined;
-  const joined = posix.normalize(posix.join(posix.dirname(from), specifier));
-  const candidates = [joined, ...[".ts", ".tsx", ".mts", ".cts"].map((ext) => joined.replace(/\.js$/, "") + ext), ...[".ts", ".tsx"].map((ext) => posix.join(joined, "index" + ext))];
-  for (const candidate of candidates) {
-    const rel = toRelative(root, resolve(root, candidate));
-    if (rel === undefined) continue;
-    if (vanished.has(rel) && isSourceFile(rel, language)) return rel;
-    try {
-      if (statSync(resolve(root, rel)).isFile() && isSourceFile(rel, language)) return rel;
-    } catch {
-      // Not there; try the next.
-    }
-  }
-  return undefined;
+  return SOURCE_SYNTAX[language]().resolveModule(root, from, specifier, vanished);
 }
 
 /** The names a file imports from files under the root, with the module each comes from; `vanished` as for resolveModule. */
@@ -134,27 +115,7 @@ export function importsOf(root: string, file: string, text: string, language: La
     if (module === undefined || module === file) return;
     found.push({ name, module });
   };
-  if (language === "typescript") {
-    for (const m of text.matchAll(TS_NAMED)) {
-      for (const piece of m[1]!.split(",")) {
-        const cleaned = piece.replace(/^\s*type\s+/, "").trim();
-        if (cleaned === "") continue;
-        const original = cleaned.split(/\s+as\s+/)[0]!.trim();
-        add(original, m[2]!);
-      }
-    }
-    for (const m of text.matchAll(TS_DEFAULT)) add("default", m[2]!);
-    for (const m of text.matchAll(TS_NAMESPACE)) add(undefined, m[1]!);
-    for (const m of text.matchAll(TS_SIDE)) add(undefined, m[1]!);
-  } else {
-    for (const m of text.matchAll(PY_FROM)) {
-      for (const piece of m[2]!.replace(/[()]/g, "").split(",")) {
-        const name = piece.trim().split(/\s+as\s+/)[0]!.trim();
-        if (name !== "" && name !== "*") add(name, m[1]!);
-      }
-    }
-    for (const m of text.matchAll(PY_IMPORT)) add(undefined, m[1]!);
-  }
+  SOURCE_SYNTAX[language]().importsOf(text, add);
   const seen = new Set<string>();
   return found.filter((i) => {
     const key = `${i.name ?? "*"} ${i.module}`;
