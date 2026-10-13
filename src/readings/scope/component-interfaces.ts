@@ -314,6 +314,7 @@ export interface WordIndex {
 /** The word index over the component code, each file with the component it belongs to. */
 export function wordIndex(root: string, code: ReadonlyMap<string, string>, language: Language, read: (file: string) => string = (file) => readFileSync(join(root, file), "utf8")): WordIndex {
   const files = [...code.keys()].sort();
+  const syntax = INTERFACE_SYNTAX[language];
   const owners = new Map<string, Set<string>>();
   const where = new Map<string, Map<number, number>>();
   const direct = new Map<string, Set<string>>();
@@ -347,7 +348,6 @@ export function wordIndex(root: string, code: ReadonlyMap<string, string>, langu
       files.set(index, count);
       where.set(token, files);
     }
-    const syntax = INTERFACE_SYNTAX[language];
     for (const list of syntax.importLists(text)) aliasesIn(list);
     for (const name of syntax.defaultNames(text)) defaults.add(name);
     for (const module of syntax.wildcardModules(file, text)) add(wildcards, module, owner);
