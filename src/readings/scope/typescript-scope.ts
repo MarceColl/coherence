@@ -21,6 +21,7 @@ export const TYPESCRIPT_INTERFACES: InterfaceSyntax = {
   serverBounds: false,
   importLists: (text) => [...text.matchAll(TS_LIST)].map((m) => m[1]!),
   defaultNames: (text) => [...text.matchAll(TS_DEFAULT_NAME)].map((m) => m[1]!),
+  // No .js spelling: the word index looks a wildcard up by a declaration's file, which is always source (isSourceFile), never JavaScript.
   wildcardModules(file, text) {
     const modules: string[] = [];
     for (const [, specifier] of text.matchAll(TS_WILDCARD)) {
@@ -33,7 +34,12 @@ export const TYPESCRIPT_INTERFACES: InterfaceSyntax = {
   },
 };
 
-/** The module files a changed file wildcard re-exports, in every spelling a kept answer can name them by. */
+/**
+ * The module files a changed file wildcard re-exports, in every spelling a
+ * kept answer can name them by. Unlike wildcardModules it adds the .js
+ * spelling: a kept answer's module is its definition's file as the server
+ * reports it, which can be JavaScript (KEPT_EXTENSIONS in kept-answers.ts).
+ */
 export function typescriptKeptModules(file: string, text: string): string[] {
   const modules: string[] = [];
   for (const [, specifier] of text.matchAll(TS_WILDCARD)) {
