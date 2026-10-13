@@ -38,6 +38,13 @@ Enforcement by detection: the chokepoint check with its grade ladder and automat
   crossing: instrument -> reading
   refuted: dropped the rule that a plain import specifier in the chokepoint's own module is inside, so classifySite read that site by range like any other -> the totality oracle went red, then green once restored (2026-09-18); stopped querying references to the chokepoint, so the real TypeScript fixture's runtime and import-only chokepoint references disappeared from the classified sites -> the focused enforcement test went red, then green once restored (2026-09-18)
   kinds: none
+- a site the adapter marks as test is a test: A reference site the adapter marks as test code is a test reference wherever it stands, the chokepoint's own file and range included: the marker is read before the chokepoint's range, and only a re-export, a bypass wherever it stands, is read before it; an unmarked site in the same place is classified as before.
+  over: every site in a test folder, a test file by name, or an in-file test module the adapter marks, inside and outside the chokepoint's range and file
+  via: a site the adapter marks as test is a test reference even in the chokepoint's own file
+  because: Rust keeps unit tests in a `#[cfg(test)]` module inside the file they test, so a path rule cannot see them; read by range, a test beside the chokepoint is inside it and a test elsewhere in its file is a bypass, and either would grade the chokepoint on code that never ships. Only the adapter can read the module a site sits in, so it marks the site and the check honours the mark first
+  crossing: instrument -> reading
+  refuted: dropped the site.test clause from classifySite, so a marked site was read by range like any other -> "a site the adapter marks as test is a test reference even in the chokepoint's own file" went red in enforcement.test.ts on its own assertion; restored byte for byte, green batched and alone (2026-10-13)
+  kinds: none
 - both endpoint sites recorded honestly: A completed chokepoint run persists protected references and chokepoint references, and an import-only chokepoint reference is reliance evidence without being called a runtime call.
   over: every completed protected-thing and chokepoint reference query, every persisted site, and every import-only reference to a public chokepoint
   via: run sites persist protected references and chokepoint references without turning an unused import into a call

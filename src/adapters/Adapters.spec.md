@@ -58,6 +58,13 @@ The language adapter seam: how to ask a language's server for definitions, refer
   crossing: instrument -> reading
   refuted: made a package's own files no longer inside the protected package -> "a Python module or package resolves, its members are the references' start, and the package's own files are inside it" went red in python.test.ts; restored, green (2026-09-17)
   kinds: none
+- a Rust module's subtree is inside the module: A site in a file a protected or chokepoint Rust module owns is inside the module: `X/mod.rs` owns the files under `X/`, `X.rs` owns those under its sibling `X/`, and a crate root `src/lib.rs` or `src/main.rs` owns those under its `src/`; a file beside the folder, or in a folder that only shares its prefix, is not.
+  over: every Rust module file a chokepoint or protected thing names as a module, the files under the folder it owns at any depth, and the files beside that folder
+  via: a Rust module's subtree is inside the module: X/mod.rs owns X/, X.rs owns its sibling X/, a crate root owns src/
+  because: Rust's privacy is by module tree, and a module's child modules live in the folder its file owns, so a child reaching its parent's item is the module reaching itself, as a Python package's own files are inside the package; read as the one file alone, every child module of a protected Rust module would be a bypass
+  crossing: instrument -> reading
+  refuted: made withinModule read only a Python package's __init__, so no Rust module owned any folder -> "a Rust module's subtree is inside the module: X/mod.rs owns X/, X.rs owns its sibling X/, a crate root owns src/" went red in enforcement.test.ts on its own assertion; restored byte for byte, green batched and alone (2026-10-13)
+  kinds: none
 - whole workspace indexed: The Python adapter waits for Pyright's enumeration of the whole workspace before answering, and never narrows the workspace to a component.
   over: every references query and every bare-name resolution the Python adapter answers
   via: Python waits for whole-workspace enumeration before bare-name resolution and references, and finds references outside the component

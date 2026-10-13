@@ -555,3 +555,48 @@ test("the grammar: an entrance's control: none carries a non-empty reason and ne
   assert.deepEqual(both.problems.map((p) => `${p.line} ${p.message}`), ["9 entrance in names a guard: and control: none; a guard is a control, so keep one of them"]);
   assert.ok(entrance("  control: none — a\n  control: none — b\n").problems.some((p) => p.line === 9 && p.message === "entrance in names its control twice"));
 });
+
+/** A component declaring hand lists as mirrors: a closure, another literal, and an object's keys, each file named from the component or from the root. */
+function mirrored(mirrors: string, files: Record<string, string> = {}): Record<string, string> {
+  return {
+    "Widgetry.spec.md": "# Widgetry\n\nA store of widgets.\n\n## invariants\n",
+    "src/page/Page.spec.md": `# Page\n\nThe page.\n\n## mirrors\n${mirrors}\n## invariants\n`,
+    "src/page/build.ts": 'export const SOURCES = ["page.ts", "view.ts"];\nexport const EVENTS = ["start", "stop"] as const;\nconst PLURALS = new Set(["route"]);\n',
+    "src/page/page.ts": 'import { view } from "./view.ts";\nexport const page = view;\n',
+    "src/page/view.ts": "export const view = 1;\n",
+    "src/hooks/events.ts": 'export const HOOK_EVENTS = ["start", "stop"];\nexport const RULES = { route: "routes" };\n',
+    ...files,
+  };
+}
+
+test("the model: a mirror names a list and what it mirrors that are both declared, and one whose name or file is gone is a problem", () => {
+  const valid = [
+    "- SOURCES in build.ts: the modules the bundle joins\n  mirrors: closure of page.ts, src/page/view.ts\n",
+    "- EVENTS in src/page/build.ts: the events a summary names\n  mirrors: HOOK_EVENTS in src/hooks/events.ts\n",
+    "- PLURALS in build.ts: the rules a plural is kept for\n  mirrors: keys of RULES in src/hooks/events.ts\n",
+  ];
+  // What adopters write correctly: a file from the component or from the root, a closure of one file or several, a list not exported, keys of an object.
+  withModel(mirrored(valid.join("")), (model) => {
+    assert.deepEqual(model.problems, []);
+    const mirrors = model.components.find((c) => c.folder === "src/page")!.mirrors;
+    assert.deepEqual(mirrors.map((m) => [m.name, m.listFile, m.recipe?.kind, m.sources]), [
+      ["SOURCES", "src/page/build.ts", "closure", ["src/page/page.ts", "src/page/view.ts"]],
+      ["EVENTS", "src/page/build.ts", "literal", ["src/hooks/events.ts"]],
+      ["PLURALS", "src/page/build.ts", "keys", ["src/hooks/events.ts"]],
+    ]);
+  });
+  withModel(mirrored(""), (model) => assert.deepEqual(model.problems, [], "an empty mirrors section is no problem"));
+  const problems = (mirrors: string): string[] => {
+    let found: string[] = [];
+    withModel(mirrored(mirrors), (model) => (found = model.problems.map((p) => `${p.line} ${p.message}`)));
+    return found;
+  };
+  assert.deepEqual(problems("- GONE in build.ts: a list since derived\n  mirrors: closure of page.ts\n"), ["6 mirror GONE: GONE is not declared at the top level of src/page/build.ts; derive what was hand-kept, or remove the mirror"]);
+  assert.deepEqual(problems("- SOURCES in moved.ts: the modules\n  mirrors: closure of page.ts\n"), ["6 mirror SOURCES: moved.ts does not exist (read under src/page and under the root)"]);
+  assert.deepEqual(problems("- EVENTS in build.ts: the events\n  mirrors: HOOK_EVENTS in src/hooks/gone.ts\n"), ["7 mirror EVENTS: src/hooks/gone.ts does not exist (read under src/page and under the root)"]);
+  assert.deepEqual(problems("- EVENTS in build.ts: the events\n  mirrors: closure of page.ts, old.ts\n"), ["7 mirror EVENTS: closure of old.ts, which does not exist (read under src/page and under the root)"]);
+  assert.deepEqual(problems("- EVENTS in build.ts: the events\n"), ["6 mirror EVENTS names nothing it mirrors: add mirrors: closure of <file>, keys of <NAME> in <file>, or <NAME> in <file>"]);
+  assert.deepEqual(problems("- EVENTS in build.ts: the events\n  mirrors: whatever events.ts says\n"), ["7 mirrors: on EVENTS reads closure of <file>, <file>, keys of <NAME> in <file>, or <NAME> in <file>"]);
+  assert.deepEqual(problems("- EVENTS in build.ts: the events\n  mirrors: HOOK_EVENTS in src/hooks/events.ts\n  because: why\n"), ['8 unknown key "because": a mirror carries mirrors']);
+  assert.deepEqual(problems("- EVENTS: the events\n  mirrors: HOOK_EVENTS in src/hooks/events.ts\n"), ["6 a mirror is one bullet: - <NAME> in <file>: <meaning>, with an indented mirrors: closure of <file>, <file> | keys of <NAME> in <file> | <NAME> in <file> line"]);
+});

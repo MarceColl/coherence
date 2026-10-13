@@ -22,6 +22,10 @@ The gyroscope delivered through harness events: orient at start, regulate at sto
   handler: runHook in hook.ts
   trust: harness
 
+## mirrors
+- STATUS_TOOL_HOOKS in statusline.ts: the tool hooks the status line holds to the latency budget, kept apart because the status line imports nothing of Coherence's
+  mirrors: TOOL_HOOKS in hook-events.ts
+
 ## invariants
 - a subagent is told its own session: A subagent's start names its own session for every journal write and names its coordinator's session as one it never writes under; the main thread's start names no coordinator.
   over: a subagent start carrying the host's agent id beside its coordinator's session, and a main-thread start
@@ -1211,6 +1215,40 @@ The gyroscope delivered through harness events: orient at start, regulate at sto
   because: in the comment mode, findings are reported and never fail the job, while a run that never happened is never mistaken for a clean one; a report read from the latest verdicts instead of the session's run would show a pass from another branch
   refuted: buildReport read every run in each project instead of the CI session's, so another session's later pass hid the failing verdict -> "ci report carries each project's problems, chokepoint verdicts, spec gaps and guard failures as Markdown, and fails only when Coherence did not finish" went red in ci.test.ts on its own assertion; restored byte for byte, green batched and alone (2026-10-09)
   kinds: none
+- a closure mirror is named at the edit that breaks it: At PostToolUse, a write to a file in the value-import closure a declared mirror names is read again, and each file the closure now reaches that the list does not name is added to the edit's context as advice, never a block, naming the file that imports it and the list's file and line; a type-only import adds nothing, and the file the closure grew by is watched from then on.
+  over: a fixture of the b37627e shape: a list of the page's modules, the closure of page.ts, a type-only import added to a closure file, then a value import of a file the list omits
+  via: an edit that gives a closure file a value import its mirror omits names the file and the list's line, as advice
+  because: BROWSER_SOURCES was a hand list of the Scope page's modules; b37627e made structure-flow.ts import languages-read.ts without adding it, and releases 1.6.0 to 1.7.1 shipped a page stuck on Connecting; the edit that broke it was the one moment the mismatch was cheap to see (d-f1ff87d6)
+  crossing: project-source -> reading
+  refuted: made the closure check count only the closure's starting files as missing -> "an edit that gives a closure file a value import its mirror omits names the file and the list's line, as advice" went red in mirrors.test.ts on its own assertion (the import of languages-read.ts went unnamed); restored byte for byte, green (2026-10-12)
+  kinds: none
+- a literal mirror is named at the edit that breaks it: At PostToolUse, a write to a declared mirror's list or to its partner literal reads both again, and when their members differ (another literal's members, or an object's keys) the edit's context names what each side holds alone and both files and lines, as advice; the same disagreement is said once per session, and agreeing again is silent and forgets it.
+  over: a list and its partner literal, and a set and an object's keys, changed on either side, an unrelated change to a file that still disagrees, and a fix
+  via: an edit that makes a list and its partner literal disagree names what each side holds alone, once per session
+  because: two literals kept equal by hand drift without failing anything (defect family hand-list); naming the drift at the edit that made it is the cheap moment, and saying a standing drift at every later edit of a busy file would train a reader to skip the line
+  crossing: project-source -> reading
+  refuted: said every disagreement at every watched edit, ignoring what the session was told -> "an edit that makes a list and its partner literal disagree names what each side holds alone, once per session" went red in mirrors.test.ts on its own assertion; restored byte for byte, green (2026-10-12)
+  kinds: none
+- a gone mirror is said at the edit: A write to a file a declared mirror spans, after which its list or partner literal is no longer declared as a literal there, adds a line to the edit's context saying the mirror cannot be checked and why, and the spec model names the same mirror as a problem; a mirror is never skipped in silence.
+  over: a mirror whose list is removed from its file by an edit
+  via: a mirror whose list is gone is said at the edit and is a spec problem, never skipped
+  because: a check that skips what it cannot find reads as a clean edit; a hand list derived away leaves a declaration that names nothing, and both the edit and spec --check must say so
+  crossing: project-source -> reading
+  refuted: read a list no longer declared as a literal as agreeing -> "a mirror whose list is gone is said at the edit and is a spec problem, never skipped" went red in mirrors.test.ts on its own assertion (the edit said nothing); restored byte for byte, green (2026-10-12)
+  kinds: none
+- the mirror alarm costs an unwatched edit one lookup: At PostToolUse, an edit to no file a declared mirror spans costs the alarm one read of the kept index and a lookup, and reads no source file; a watched edit reads the list, its partner, and only the closure files whose size or modification time changed, never loading the TypeScript compiler.
+  over: an edit to a file no mirror spans and an edit to a closure file, timed and counted by the work meter
+  via: an edit no mirror watches costs the alarm one lookup and reads no source
+  because: the tool hooks share a 3 s budget around every tool call; the spike measured 155 ms to load TypeScript and 29 ms to parse one file, where a regex over the literal and the imports takes under a millisecond (d-164b52ef)
+  crossing: project-source -> reading
+  refuted: read every declared mirror again at every edit, whatever file it wrote -> "an edit no mirror watches costs the alarm one lookup and reads no source" went red in mirrors.test.ts on its own assertion (an unwatched edit read the fixture's sources); restored byte for byte, green (2026-10-12)
+  kinds: budget
+  checklist: bounded-admission dismissed: nothing is admitted; the bound is on what one edit reads
+  checklist: execution-budget declared as the mirror alarm costs an unwatched edit one lookup
+  checklist: fair-admission dismissed: there are no contenders for the budget
+  checklist: rate-budget dismissed: nothing is counted against a time window
+  checklist: memory-budget dismissed: the bound is on reads, not on allocation
+  checklist: circuit-breaker-policy dismissed: the alarm has no dependency to fail
 - the warm hook process answers as the hook does: coherence hook-serve answers each event with the stdout, stderr and exit code coherence hook <event> prints for it, in arrival order, one event at a time, and keeps the same records, committed once its answer was written.
   over: a session's start, prompt, edit (before and after), read and stop, through one hook-serve process and through one hook process per event, in two copies of one project
   via: the warm process answers a session's events with the per-event hook's output and keeps the same records

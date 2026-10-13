@@ -64,6 +64,10 @@
  * with what fires it; PreToolUse delivers a practice whole when the tool use
  * about to run fires it, before the act rather than after; regulate names one
  * that fired and has no enactment since, advisory, never refused.
+ * Declared mirrors ride with PostToolUse (mirrors.ts): an edit to a file a
+ * mirror watches reads the list and what it mirrors again and names a
+ * disagreement as advice, never a block; a session's start and stop keep the
+ * index of watched files from the spec model they already read.
  */
 
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
@@ -99,6 +103,7 @@ import { orientUndeclaredText, regulateUndeclaredText, undeclaredNow } from "../
 import { baselinePath, coverageChanges, deliverCandidates, heldCandidates, holdCandidates, introducedCandidates, pendingCandidates, priorBaseline, saveBaseline } from "./lexicon-cli.ts";
 import { practiceContext, practiceOrientText, practiceStopText, toolUseOf } from "./practice-delivery.ts";
 import { namesWrittenFiles, writtenNames } from "./host-tools.ts";
+import { keepMirrorIndex, mirrorAlarm } from "./mirrors.ts";
 import { earlierHookLines, OWN_CLI, versionBlock } from "./version.ts";
 
 const run = promisify(execFile);
@@ -1135,6 +1140,21 @@ function eventProject(event: HookEvent, input: HookInput, base: string, cwd: str
   return hookProject(base, subjects, cwd);
 }
 
+/**
+ * Keep the index of watched files for the declared mirrors, from the spec
+ * model this event already read: a start and a stop, so a mirror declared or
+ * a closure grown by a change no hook saw is watched from then on.
+ */
+function keepMirrorsFromModel(root: string): void {
+  const model = specModelOrNull(root);
+  if ("error" in model) return;
+  try {
+    keepMirrorIndex(root, model.components.flatMap((c) => c.mirrors ?? []));
+  } catch {
+    // An index that cannot be built is built again at the next edit that needs one, which says so if it cannot.
+  }
+}
+
 /** Run one event. `input` is the parsed stdin the host sent; `root` defaults to its cwd. */
 export async function runHook(event: HookEvent, input: HookInput, fallbackRoot: string, options: HookOptions = {}): Promise<HookResult> {
   // One spec model per event, shared by every part of its answer; the body stays inside runHook, the chokepoint for its exit codes.
@@ -1258,6 +1278,7 @@ export async function runHook(event: HookEvent, input: HookInput, fallbackRoot: 
           gaps = { ...gaps, refreshing: refreshUnderWay(root) !== undefined };
         }
         const context = await voiced(root, input, (await startReading(root, input, reading, gaps)).text, voice);
+        keepMirrorsFromModel(root);
         const session = sessionOf(input);
         if (session !== undefined) openFeed(root, session);
         // A subagent's start is kept so its stop can find what it wrote under the coordinator's session.
@@ -1297,6 +1318,8 @@ export async function runHook(event: HookEvent, input: HookInput, fallbackRoot: 
         }
         if (event === "UserPromptSubmit") options.warm?.(root);
         const edit = event === "PostToolUse" ? await editContext(root, input, { ...options, host }) : "";
+        // A hand list declared as a mirror, read again only when this edit wrote a file it watches: one lookup otherwise.
+        const mirror = event === "PostToolUse" ? mirrorAlarm(root, written, session) : { text: "", commit: () => {} };
         // The full reading walks the whole corpus (seconds on a real project), so it runs only at a prompt when the tree moved since this
         // session's last reading, and it keeps the vocabulary state an edit reads (vocabulary-state.ts). An edit reads the files it wrote
         // against that state, never the corpus; with no state valid for this code and lexicon, it takes the full reading once, which keeps one.
@@ -1354,12 +1377,14 @@ export async function runHook(event: HookEvent, input: HookInput, fallbackRoot: 
         // What the last stop said reached only the user; the prompt that follows it is where the agent reads it.
         const fromStop = event === "UserPromptSubmit" && session ? carried(root, session) : undefined;
         const lastStop = fromStop === undefined ? "" : `At your last stop (shown to the user, not to you), ${fromStop.replace(/^Regulate \(Stop\):\n/, "regulate said:\n")}`;
-        const context = await voiced(root, input, [lastStop,feed.text,edit,vocabularyNote,vocabulary].filter(Boolean).join("\n"), voice);
+        const context = await voiced(root, input, [lastStop,feed.text,edit,mirror.text,vocabularyNote,vocabulary].filter(Boolean).join("\n"), voice);
+        // A mirror that agrees again is forgotten at once: nothing was said that must first reach the host.
+        if (mirror.text === "") mirror.commit();
         if (context === "") return { stdout: "", stderr: "", exit: 0 };
         const stdout = JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: context } });
         // An override took the feed's and the vocabulary line's place, so neither reached the host and neither advances.
-        const delivered = voice.override === undefined && (feed.text !== "" || changes.length > 0 || pending.length > 0 || lastStop !== "");
-        const commit=()=> { if(feed.text) feed.commit(); if(changes.length && session) { if (reading) saveBaseline(root,session,reading); else keep(); } if(pending.length && session) deliverCandidates(root,session,pending); if(lastStop && session) dropCarry(root,session); };
+        const delivered = voice.override === undefined && (feed.text !== "" || mirror.text !== "" || changes.length > 0 || pending.length > 0 || lastStop !== "");
+        const commit=()=> { if(feed.text) feed.commit(); if(mirror.text) mirror.commit(); if(changes.length && session) { if (reading) saveBaseline(root,session,reading); else keep(); } if(pending.length && session) deliverCandidates(root,session,pending); if(lastStop && session) dropCarry(root,session); };
         return {stdout:stdout+"\n",stderr:"",exit:0,...(delivered ? {commit} : {})};
       }
       case "Stop":
@@ -1384,6 +1409,7 @@ export async function runHook(event: HookEvent, input: HookInput, fallbackRoot: 
         const gapText = await gapStopText(root, input, changed.files);
         const undeclaredText = await undeclaredStopText(root, changed.files);
         const heldModel = specModelOrNull(root);
+        keepMirrorsFromModel(root);
         const practiceText = practiceStopText(root, session, await cliName(root), agentOf(input), "error" in heldModel ? undefined : heldModel);
         const economyText = economyStopText(snapshot);
         const latencyText = hookLatencyStopText(root, session);

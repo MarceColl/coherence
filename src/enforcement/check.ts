@@ -66,10 +66,10 @@ import { horizonSites, projectSites, searchedHorizon } from "../adapters/project
 import { fromText, type ChokepointFrom } from "../spec/grammar.ts";
 import type { Bypass, Governed, Grade, ReferenceTarget, RefutationState, SiteClass, Verdict } from "./record.ts";
 
-export interface ClassifiedSite extends ReferenceSite {
+export interface ClassifiedSite extends Omit<ReferenceSite, "test"> {
   class: SiteClass;
   of: ReferenceTarget;
-  /** Test location is an orthogonal fact, not a claim about how the chokepoint is used. */
+  /** Test location is an orthogonal fact, not a claim about how the chokepoint is used: a test path, or a site the adapter marks as test. */
   test: boolean;
   /** The checker that refuses this import, with its error, when one does. */
   checker?: string;
@@ -127,6 +127,8 @@ export function classifySite(site: ReferenceSite, protectedThing: Definition, ch
   const position = { line: site.line - 1, character: site.character };
   // A re-export widens the thing's reach with no call at all, so it is a bypass wherever it stands.
   if (site.form === "re-export") return "bypass";
+  // A site the adapter read as test code is a test before any range: a test module in the chokepoint's own file is not inside it.
+  if (site.test === true) return "test";
   // A plain import specifier is how the chokepoint's own module reaches the thing, not a place the thing is used.
   const inChokepointModule = chokepoint.kind === "module" ? withinModule(site.file, chokepoint.file) : site.file === chokepoint.file;
   if (site.form === "import" && inChokepointModule) return "inside";
@@ -159,11 +161,16 @@ function ownedBy(boundary: CheckerBoundary, file: string): boolean {
   return boundary.owns.some(under) && !boundary.except.some(under);
 }
 
-/** Whether a file is the module, or, when the module is a package's __init__, one of the package's own files. */
+/**
+ * Whether a file is the module, or one of the files its module subtree owns:
+ * a Python package's own files under its __init__; under a Rust `X/mod.rs`,
+ * the files of `X/`; under a Rust `X.rs`, the files of its sibling `X/`; and
+ * under a crate root `src/lib.rs` or `src/main.rs`, the files of `src/`.
+ */
 function withinModule(file: string, moduleFile: string): boolean {
   if (file === moduleFile) return true;
-  const init = /^(.*)\/__init__\.py$/.exec(moduleFile);
-  return init !== null && file.startsWith(init[1] + "/");
+  const owned = /^(.*)\/(?:__init__\.py|mod\.rs)$/.exec(moduleFile)?.[1] ?? /^((?:.*\/)?src)\/(?:lib|main)\.rs$/.exec(moduleFile)?.[1] ?? /^(.*)\.rs$/.exec(moduleFile)?.[1];
+  return owned !== undefined && file.startsWith(owned + "/");
 }
 
 const NOT_CHOKEABLE_NOTE = "the totality oracle form (over + via) is the compromise where structure is unavailable";
@@ -267,8 +274,8 @@ async function checkWithinProject(adapter: LanguageAdapter, input: ChokepointInp
     return found === "bypass" && boundary !== undefined && site.form !== "re-export" && ownedBy(boundary, site.file) ? "inside" : found;
   };
   const sites: ClassifiedSite[] = [
-    ...protectedReferences.map((site) => ({ ...site, of: "protected" as const, test: isTestPath(site.file, input.testFolders), class: protectedClass(site) })),
-    ...chokepointReferences.map((site) => ({ ...site, of: "chokepoint" as const, test: isTestPath(site.file, input.testFolders), class: classifyChokepointSite(site, chokepoint) })),
+    ...protectedReferences.map((site) => ({ ...site, of: "protected" as const, test: site.test === true || isTestPath(site.file, input.testFolders), class: protectedClass(site) })),
+    ...chokepointReferences.map((site) => ({ ...site, of: "chokepoint" as const, test: site.test === true || isTestPath(site.file, input.testFolders), class: classifyChokepointSite(site, chokepoint) })),
   ];
   // Every import the checker refused is a bypass, on the site the instrument reported on its line or as a site of its own.
   for (const refused of boundary?.violations ?? []) {

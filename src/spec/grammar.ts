@@ -18,6 +18,10 @@
  *     guard: <a chokepoint's symbol>                     optional; the chokepoint its handler is registered through
  *     control: none — <reason>                           optional; it needs no control, and why (never beside guard:)
  *
+ *   ## mirrors                 (any spec)
+ *   - <NAME> in <file>: <one-line meaning: what the hand list lists>
+ *     mirrors: closure of <file>, <file> | keys of <NAME> in <file> | <NAME> in <file>
+ *
  *   ## invariants
  *   - <name>: <sentence>
  *     protects: <symbol or module>            chokepoint form, with
@@ -61,10 +65,11 @@ export const RETIRED_SECTIONS: readonly RetiredSection[] = (
 
 export const TRUST_LEVELS_SECTION = "trust levels";
 export const ENTRANCES_SECTION = "entrances";
+export const MIRRORS_SECTION = "mirrors";
 export const INVARIANTS_SECTION = "invariants";
 
 /** What a spec may hold, for the problems that name it. */
-const SECTIONS_SENTENCE = "a spec holds ## trust levels (entry spec only), ## entrances and ## invariants";
+const SECTIONS_SENTENCE = "a spec holds ## trust levels (entry spec only), ## entrances, ## mirrors and ## invariants";
 
 /** The keys an invariant bullet may carry, in the order the scaffold prints them. */
 export const KEYS = ["protects", "chokepoint", "from", "over", "via", "because", "crossing", "entrances", "refuted", "kinds", "checklist"] as const;
@@ -119,6 +124,61 @@ export interface Entrance {
   noControl?: string | undefined;
   /** The control line, when there is one. */
   controlLine?: number | undefined;
+}
+
+/**
+ * What a mirror's list must equal: the value-import closure of some files
+ * (the files they import, transitively, never through a type-only import),
+ * the keys of another object literal, or another literal's members. A file
+ * reads relative to the component's folder, then to the root.
+ */
+export type MirrorRecipe =
+  | { kind: "closure"; files: string[] }
+  | { kind: "keys"; name: string; file: string }
+  | { kind: "literal"; name: string; file: string };
+
+/**
+ * A hand list that must mirror something defined elsewhere, declared beside
+ * what it mirrors so an edit that makes the two disagree is named at the edit
+ * (lifecycle/mirrors.ts). The model checks that the list and what it names
+ * are still declared, so a declaration cannot rot unseen.
+ */
+export interface Mirror {
+  /** The list's top-level name. */
+  name: string;
+  /** The file declaring it, as written. */
+  file: string;
+  meaning: string;
+  line: number;
+  /** Undefined when the bullet names none, which is a problem. */
+  recipe: MirrorRecipe | undefined;
+  /** The mirrors: line, or the bullet's own line when there is none. */
+  recipeLine: number;
+}
+
+/** How a mirror bullet is written, for the problems that name it. */
+export const MIRROR_FORM = "- <NAME> in <file>: <meaning>, with an indented mirrors: closure of <file>, <file> | keys of <NAME> in <file> | <NAME> in <file> line";
+
+const NAME_IN_FILE = /^([A-Za-z_$][\w$]*)\s+in\s+(\S+)$/;
+
+/** A mirrors: value read, or undefined when it is none of the three forms. */
+export function parseMirrorRecipe(value: string): MirrorRecipe | undefined {
+  const text = value.trim().replace(/\s+/g, " ");
+  const closure = /^closure of (.+)$/.exec(text);
+  if (closure !== null) {
+    const files = closure[1]!.split(",").map((file) => file.trim()).filter((file) => file !== "");
+    return files.length === 0 || files.some((file) => /\s/.test(file)) ? undefined : { kind: "closure", files };
+  }
+  const keys = /^keys of (.+)$/.exec(text);
+  const named = NAME_IN_FILE.exec(keys === null ? text : keys[1]!);
+  if (named === null) return undefined;
+  return { kind: keys === null ? "literal" : "keys", name: named[1]!, file: named[2]! };
+}
+
+/** A recipe as a spec writes it. */
+export function mirrorRecipeText(recipe: MirrorRecipe): string {
+  if (recipe.kind === "closure") return `closure of ${recipe.files.join(", ")}`;
+  return `${recipe.kind === "keys" ? "keys of " : ""}${recipe.name} in ${recipe.file}`;
 }
 
 /** The one value a control: line takes, and its reason after a dash: `none — <reason>` (an em dash, or - or --). */
@@ -230,6 +290,8 @@ export interface ParsedSpec {
   trustLevelsLine: number | undefined;
   /** Empty when the spec has no entrances section. */
   entrances: Entrance[];
+  /** Empty when the spec has no mirrors section. */
+  mirrors: Mirror[];
   invariants: Invariant[];
   problems: Problem[];
 }
@@ -296,9 +358,12 @@ export function parseSpec(text: string, file: string, options: ParseOptions = {}
   let trustLevelsLine: number | undefined;
   let entrancesSeen = false;
   const entrances: Entrance[] = [];
+  let mirrorsSeen = false;
+  const mirrors: Mirror[] = [];
+  const misread = new Set<Mirror>();
   const bullets: RawBullet[] = [];
 
-  type Section = "head" | "trust levels" | "entrances" | "invariants" | "skip";
+  type Section = "head" | "trust levels" | "entrances" | "mirrors" | "invariants" | "skip";
   let section: Section = "head";
   let paragraph: string[] = [];
   let paragraphLine = 0;
@@ -357,6 +422,12 @@ export function parseSpec(text: string, file: string, options: ParseOptions = {}
         if (entrancesSeen) problem(line, "## entrances given twice");
         entrancesSeen = true;
         section = "entrances";
+        return;
+      }
+      if (key === MIRRORS_SECTION) {
+        if (mirrorsSeen) problem(line, "## mirrors given twice");
+        mirrorsSeen = true;
+        section = "mirrors";
         return;
       }
       if (key === INVARIANTS_SECTION) {
@@ -486,6 +557,45 @@ export function parseSpec(text: string, file: string, options: ParseOptions = {}
         current.handlerLine = line;
         return;
       }
+      case "mirrors": {
+        if (raw.trim() === "") return;
+        const bullet = /^[-*]\s+(.*)$/.exec(raw);
+        if (bullet !== null) {
+          const colon = bullet[1]!.indexOf(":");
+          const named = colon <= 0 ? null : NAME_IN_FILE.exec(bullet[1]!.slice(0, colon).trim());
+          if (named === null) {
+            problem(line, `a mirror is one bullet: ${MIRROR_FORM}`);
+            // The lines under it belong to no mirror; a placeholder keeps them from landing on the one above.
+            mirrors.push({ name: "", file: "", meaning: "", line, recipe: undefined, recipeLine: -1 });
+            return;
+          }
+          const meaning = bullet[1]!.slice(colon + 1).trim();
+          if (meaning === "") problem(line, `mirror ${named[1]} needs a one-line meaning`);
+          if (mirrors.some((m) => m.name === named[1] && m.file === named[2])) problem(line, `mirror ${named[1]} in ${named[2]} declared twice`);
+          mirrors.push({ name: named[1]!, file: named[2]!, meaning, line, recipe: undefined, recipeLine: line });
+          return;
+        }
+        const current = mirrors[mirrors.length - 1];
+        const field = /^\s+([a-z]+):\s*(.*)$/.exec(raw);
+        if (current === undefined || field === null) {
+          problem(line, "expected a mirror bullet (- <NAME> in <file>: <meaning>) or an indented mirrors: line under one");
+          return;
+        }
+        if (current.recipeLine === -1) return;
+        if (field[1] !== "mirrors") {
+          problem(line, `unknown key "${field[1]}": a mirror carries mirrors`);
+          return;
+        }
+        if (current.recipe !== undefined || current.recipeLine !== current.line) problem(line, `mirror ${current.name} names what it mirrors twice`);
+        current.recipeLine = line;
+        const value = field[2]!.trim();
+        if (value === "" || isPlaceholder(value)) return;
+        const recipe = parseMirrorRecipe(value);
+        if (recipe === undefined) misread.add(current);
+        if (recipe === undefined) problem(line, `mirrors: on ${current.name} reads closure of <file>, <file>, keys of <NAME> in <file>, or <NAME> in <file>`);
+        else current.recipe = recipe;
+        return;
+      }
       case "invariants": {
         if (raw.trim() === "") return;
         const bullet = /^[-*]\s+(.*)$/.exec(raw);
@@ -543,8 +653,12 @@ export function parseSpec(text: string, file: string, options: ParseOptions = {}
       problem(entrance.controlLine ?? entrance.line, `entrance ${entrance.name} names a guard: and control: none; a guard is a control, so keep one of them`);
     }
   }
+  const named = mirrors.filter((mirror) => mirror.recipeLine !== -1);
+  for (const mirror of named) {
+    if (mirror.recipe === undefined && !misread.has(mirror)) problem(mirror.line, `mirror ${mirror.name} names nothing it mirrors: add mirrors: closure of <file>, keys of <NAME> in <file>, or <NAME> in <file>`);
+  }
   const invariants = bullets.map((bullet) => buildInvariant(bullet, problem, options.seed));
-  return { file, title, intent, ...(owners === undefined ? {} : { owners }), trustLevels, trustLevelsLine, entrances, invariants, problems };
+  return { file, title, intent, ...(owners === undefined ? {} : { owners }), trustLevels, trustLevelsLine, entrances, mirrors: named, invariants, problems };
 }
 
 function buildInvariant(bullet: RawBullet, problem: (line: number, message: string) => void, seed: Seed | undefined): Invariant {

@@ -507,6 +507,9 @@
       "provenance": {
         "reference_note": "The reference split one invariant across four sections (invariants, works when, refutations, why) and let works-when hold claims with no invariant behind them. Here the invariant is the unit and the sections collapse into it.",
         "defined_by": "owner, 2026-09-17 (assembled from settled decisions)"
+      },
+      "properties": {
+        "mirror": "A hand list a spec declares under ## mirrors beside what it must equal: the value-import closure of some files, the keys of an object literal, or another literal. The hook reads both again at an edit to a file they span and names a disagreement as advice, never a block; a list or partner that is gone is a spec problem."
       }
     },
     {

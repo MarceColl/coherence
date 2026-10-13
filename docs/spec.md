@@ -3,7 +3,7 @@
 A component is any folder with a spec file, `<Name>.spec.md`. Folders without
 one are transparent; a super folder becomes a component when a relationship
 invariant about its children needs a home. The spec holds a title, a one-line
-intent, `## trust levels` in the entry spec only, `## entrances`, and
+intent, `## trust levels` in the entry spec only, `## entrances`, `## mirrors`, and
 `## invariants`. No other section: the parser refuses the reference's sections
 by name and says what replaced each.
 
@@ -121,6 +121,57 @@ and holds none, and it reports every module it skipped. It never overwrites a
 spec. A malformed `tach.toml` is refused with its line, and so is a module it
 does not declare, and nothing is drafted. Each source is named for the tool
 whose file it reads, so others can follow.
+
+## Mirrors
+
+A hand list is a literal kept by hand that must equal something defined
+elsewhere: the modules a bundle joins, the tool hooks a status line counts. Where
+the list cannot simply be derived from what it mirrors, the component that
+owns it declares it as a mirror, one bullet each, with what it must equal:
+
+```markdown
+## mirrors
+- BROWSER_SOURCES in build.ts: the modules the browser bundle joins
+  mirrors: closure of page.ts
+- STATUS_TOOL_HOOKS in statusline.ts: the tool hooks the status line holds to the budget
+  mirrors: TOOL_HOOKS in hook-events.ts
+- RULE_NAMES in rules.ts: the rules a plural is kept for
+  mirrors: keys of RULE_PLURALS in entrance-coverage.ts
+```
+
+The bullet's head is `<NAME> in <file>`: the top-level `const`, `let` or
+`var` the list is, and the file declaring it. After the colon comes a
+one-line meaning. The `mirrors:` line takes one of three forms:
+
+| form | the list must equal |
+| --- | --- |
+| `closure of <file>, <file>` | the value-import closure of those files: each file, and every project file it imports for a value, transitively. A type-only import (`import type`, or braces whose every name is marked `type`) and a package import are not followed. Each member is a path relative to the list's folder or to the root. |
+| `keys of <NAME> in <file>` | the keys of that object literal |
+| `<NAME> in <file>` | the members of that literal |
+
+A file reads relative to the component's folder, then to the root, as a
+handler does. A literal's members are an array's strings, with a tuple
+counted by its first string (a `Map`'s keys, a table's first column), and an
+object's keys; a wrapping call such as `new Set([...])` or
+`Object.freeze({...})` is looked through.
+
+The model checks that the list, and the partner literal or the closure's
+files, are still declared. A mirror whose list or partner is gone is a
+problem, so a declaration cannot rot unseen: derive the list and remove the
+mirror, or point the mirror at where the list now is.
+
+At an edit, the hook reads a mirror again when the edit wrote a file it spans:
+the list's file, any file in the closure, the partner literal's file, or the
+declaring spec. A file that is none of those costs one lookup in the index
+kept under `.coherence/mirrors`. A disagreement is added to the edit's context
+as advice, never a block, once per session until it changes:
+
+```text
+Mirror: src/readings/scope/structure-flow.ts now imports src/readings/scope/languages-read.ts, which BROWSER_SOURCES (src/readings/scope/build.ts:51) does not name: it mirrors the closure of page.ts (declared at src/readings/scope/Scope.spec.md:40: the modules the browser bundle joins).
+```
+
+A literal the reader cannot read whole (a spread, a computed key, an element
+that is not a string) is said, and nothing is compared.
 
 ## The bullet
 

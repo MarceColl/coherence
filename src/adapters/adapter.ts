@@ -77,6 +77,13 @@ export interface ReferenceSite {
   symbol: string | undefined;
   /** The syntactic form the adapter read at the site, when the site has one. */
   form?: SiteForm;
+  /**
+   * Set when the adapter read the site as test code that its path alone does
+   * not show: a test module inside a source file, as Rust's `#[cfg(test)]`
+   * keeps one. The check classes it a test reference wherever it stands, the
+   * chokepoint's own file included.
+   */
+  test?: true;
 }
 
 /**

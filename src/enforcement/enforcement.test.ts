@@ -14,6 +14,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
+import type { Definition, ReferenceSite } from "../adapters/adapter.ts";
 import { TypeScriptAdapter, locateServer } from "../adapters/typescript.ts";
 import { runHook, specStopText } from "../lifecycle/hook.ts";
 import { loadSpecModel } from "../spec/model.ts";
@@ -568,6 +569,72 @@ test("a plain import specifier in the chokepoint's own module is inside; the sam
     await fresh.close();
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/** A definition by hand, for the classifier alone: a symbol over a line range, or a module over its whole file. */
+function definitionAt(file: string, kind: "symbol" | "module", from = 0, to = 0): Definition {
+  return { name: file, kind, file, range: { start: { line: from, character: 0 }, end: { line: to, character: 0 } }, selection: { line: from, character: 0 } };
+}
+
+/** A reference site by hand, one-based as the adapter reports it. */
+function siteAt(file: string, line: number, test?: true): ReferenceSite {
+  return { file, line, character: 4, symbol: undefined, ...(test === undefined ? {} : { test }) };
+}
+
+test("a site the adapter marks as test is a test reference even in the chokepoint's own file", () => {
+  const protectedThing = definitionAt("src/store.rs", "symbol", 2, 4);
+  const chokepoint = definitionAt("src/lib.rs", "symbol", 9, 19);
+  const classes = [
+    siteAt("src/lib.rs", 15),
+    siteAt("src/lib.rs", 15, true),
+    siteAt("src/lib.rs", 40),
+    siteAt("src/lib.rs", 40, true),
+    siteAt("src/api.rs", 3),
+    siteAt("src/api.rs", 3, true),
+  ].map((s) => `${s.file}:${s.line}${s.test === true ? " marked" : ""} ${classifySite(s, protectedThing, chokepoint, [])}`);
+  assert.deepEqual(classes, [
+    "src/lib.rs:15 inside",
+    "src/lib.rs:15 marked test",
+    "src/lib.rs:40 bypass",
+    "src/lib.rs:40 marked test",
+    "src/api.rs:3 bypass",
+    "src/api.rs:3 marked test",
+  ]);
+});
+
+test("a Rust module's subtree is inside the module: X/mod.rs owns X/, X.rs owns its sibling X/, a crate root owns src/", () => {
+  const protectedThing = definitionAt("src/store.rs", "symbol", 2, 4);
+  const classOf = (moduleFile: string, file: string): string => `${moduleFile} <- ${file}: ${classifySite(siteAt(file, 3), protectedThing, definitionAt(moduleFile, "module"), ["tests"])}`;
+  assert.deepEqual(
+    [
+      classOf("src/kernel/mod.rs", "src/kernel/inner.rs"),
+      classOf("src/kernel/mod.rs", "src/kernel/deep/leaf.rs"),
+      classOf("src/kernel/mod.rs", "src/other.rs"),
+      classOf("src/kernel.rs", "src/kernel/x.rs"),
+      classOf("src/kernel.rs", "src/kernelish/x.rs"),
+      classOf("src/kernel.rs", "src/other.rs"),
+      classOf("src/lib.rs", "src/kernel/x.rs"),
+      classOf("src/main.rs", "src/cli.rs"),
+      classOf("crates/core/src/lib.rs", "crates/core/src/a.rs"),
+      classOf("crates/core/src/lib.rs", "crates/app/src/a.rs"),
+      classOf("src/lib.rs", "tests/it.rs"),
+      classOf("src/lib.rs", "benches/b.rs"),
+    ],
+    [
+      "src/kernel/mod.rs <- src/kernel/inner.rs: inside",
+      "src/kernel/mod.rs <- src/kernel/deep/leaf.rs: inside",
+      "src/kernel/mod.rs <- src/other.rs: bypass",
+      "src/kernel.rs <- src/kernel/x.rs: inside",
+      "src/kernel.rs <- src/kernelish/x.rs: bypass",
+      "src/kernel.rs <- src/other.rs: bypass",
+      "src/lib.rs <- src/kernel/x.rs: inside",
+      "src/main.rs <- src/cli.rs: inside",
+      "crates/core/src/lib.rs <- crates/core/src/a.rs: inside",
+      "crates/core/src/lib.rs <- crates/app/src/a.rs: bypass",
+      "src/lib.rs <- tests/it.rs: test",
+      "src/lib.rs <- benches/b.rs: bypass",
+    ],
+  );
 });
 
 test("the automatic refutation stages both synthetic sites — a use in the chokepoint's own module outside its range and a re-export — and is vacuous unless the check calls each one a bypass", async () => {
