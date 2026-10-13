@@ -7,6 +7,7 @@
  */
 
 import { posix } from "node:path";
+import { languageOfFile } from "./language-files.ts";
 import { escape, handlerName, spanOf, throughOf, type EntranceCandidate, type EntranceSyntax } from "./entrance-candidates.ts";
 
 function pythonCandidates(file: string, text: string, wrappers: readonly string[]): EntranceCandidate[] {
@@ -89,7 +90,8 @@ function consoleScripts(read: (file: string) => string | undefined, exists: (fil
 
 /** Python's entrance syntax: a definition begins at its decorators and its body is indented past the def; a decorator passes through a wrapper as a call does. */
 export const PYTHON_ENTRANCES: EntranceSyntax = {
-  isCode: (file) => file.endsWith(".py"),
+  // A stub (.pyi) declares and never runs, so it registers no entrance.
+  isCode: (file) => languageOfFile(file) === "python" && !file.endsWith(".pyi"),
   definitionAt(lines, start) {
     let def = start;
     while (def < lines.length && /^\s*@/.test(lines[def] ?? "")) def += 1;
@@ -101,7 +103,7 @@ export const PYTHON_ENTRANCES: EntranceSyntax = {
   candidates: pythonCandidates,
   manifestCandidates: consoleScripts,
   script(file, folder, read) {
-    if (folder !== "scripts" || !file.endsWith(".py")) return undefined;
+    if (folder !== "scripts") return undefined;
     const text = read(file) ?? "";
     if (!/^if\s+__name__\s*==\s*["']__main__["']\s*:/m.test(text)) return undefined;
     return { file, line: 1, symbol: "", rule: "script", why: `a script under ${folder}/ with an if __name__ == "__main__" block` };

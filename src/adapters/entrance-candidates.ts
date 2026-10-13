@@ -91,7 +91,7 @@ export interface EntranceSyntax {
   candidates(file: string, text: string, wrappers: readonly string[]): EntranceCandidate[];
   /** The entrances the language's own manifest names (pyproject's console scripts), besides package.json's. */
   manifestCandidates(read: (file: string) => string | undefined, exists: (file: string) => boolean): EntranceCandidate[];
-  /** The entrance a file directly under scripts/ or bin/ (`folder`) is, or undefined when the language does not run it as a script. */
+  /** The entrance a code file (one isCode accepts) directly under scripts/ or bin/ (`folder`) is, or undefined when the language does not run it as a script. */
   script(file: string, folder: string, read: (file: string) => string | undefined, imported: ReadonlySet<string>): EntranceCandidate | undefined;
   /** Which code files some other one imports: only TypeScript's scripts are told apart by it. */
   importedAmong(code: readonly string[], read: (file: string) => string | undefined): ReadonlySet<string>;

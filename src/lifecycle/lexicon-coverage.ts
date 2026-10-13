@@ -37,6 +37,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { exclusionOf, projectFilesEnding, walkBounds } from "../adapters/project-files.ts";
 import type { Language } from "../adapters/index.ts";
+import { languageOfFile } from "../adapters/language-files.ts";
 import { readFile } from "node:fs/promises";
 import { createHash, type Hash } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -292,9 +293,8 @@ function declaredName(line: string): string | undefined {
   return undefined;
 }
 
-/** How a code file's exported type bodies read, per adapter language: the files it covers, the line that opens a body, the line that closes it, and a field inside. A file no language claims reads as TypeScript. */
+/** How a code file's exported type bodies read, per adapter language (languageOfFile): the line that opens a body, the line that closes it, and a field inside. A file no language claims has no type bodies read. */
 interface MemberScan {
-  file: RegExp;
   opens: RegExp;
   closes: RegExp;
   field: RegExp;
@@ -302,8 +302,8 @@ interface MemberScan {
 
 /** Keyed by language, so a language an adapter adds must say how its type bodies read. */
 const MEMBER_SCANS: Record<Language, MemberScan> = {
-  typescript: { file: /\.(?:[cm]?[tj]sx?)$/, opens: /^export\s+(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:interface|type|class)\s.*\{\s*$/, closes: /^[}\]]/, field: /^\s+(?:readonly\s+)?([a-z][A-Za-z0-9]*)\??:\s*[^=]/ },
-  python: { file: /\.py$/, opens: /^class\s/, closes: /^\S/, field: /^ {4}([a-z][A-Za-z0-9_]*)\s*:\s*[A-Za-z"'[]/ },
+  typescript: { opens: /^export\s+(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:interface|type|class)\s.*\{\s*$/, closes: /^[}\]]/, field: /^\s+(?:readonly\s+)?([a-z][A-Za-z0-9]*)\??:\s*[^=]/ },
+  python: { opens: /^class\s/, closes: /^\S/, field: /^ {4}([a-z][A-Za-z0-9_]*)\s*:\s*[A-Za-z"'[]/ },
 };
 
 /**
@@ -311,8 +311,8 @@ const MEMBER_SCANS: Record<Language, MemberScan> = {
  * interface, type or class, or an annotated field of a top-level Python
  * class. The file's own locals never match.
  */
-function memberName(line: string, inside: boolean, scan: MemberScan): string | undefined {
-  if (!inside) return undefined;
+function memberName(line: string, inside: boolean, scan: MemberScan | undefined): string | undefined {
+  if (!inside || scan === undefined) return undefined;
   return scan.field.exec(line)?.[1];
 }
 
@@ -643,7 +643,8 @@ export async function lexiconReading(
     );
     let fenced = false;
     let exported = false;
-    const scan = Object.values(MEMBER_SCANS).find((each) => each.file.test(f.rel)) ?? MEMBER_SCANS.typescript;
+    const language = languageOfFile(f.rel);
+    const scan = language === undefined ? undefined : MEMBER_SCANS[language];
     for (let n = 0; n < f.lines.length; n++) {
       const source = f.lines[n]!;
       // Review/maintenance decisions are outcomes, not fresh source-language observations of themselves.
@@ -718,8 +719,8 @@ export async function lexiconReading(
         const member = memberName(observed, exported, scan);
         if (member !== undefined) nominate({ term: clean(member), spelling: member, proper: false }, use, true);
         // A body opened by an exported type (or a top-level Python class) holds declared fields until it closes at the margin.
-        if (scan.opens.test(observed)) exported = true;
-        else if (scan.closes.test(observed)) exported = false;
+        if (scan?.opens.test(observed)) exported = true;
+        else if (scan?.closes.test(observed)) exported = false;
         continue;
       }
       if (f.kind === "data") continue;

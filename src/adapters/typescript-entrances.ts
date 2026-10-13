@@ -6,9 +6,8 @@
  */
 
 import { posix } from "node:path";
+import { languageOfFile } from "./language-files.ts";
 import { escape, handlerName, lineOf, NEXT_ROUTE_METHODS, REMIX_ROUTE_EXPORTS, spanOf, throughOf, type EntranceCandidate, type EntranceSyntax } from "./entrance-candidates.ts";
-
-const TS_CODE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 
 /** The text from its first code: leading whitespace and comments skipped by a walk, never a backtracking pattern. */
 function leadingCode(text: string): string {
@@ -130,12 +129,11 @@ function typescriptCandidates(file: string, text: string, wrappers: readonly str
 
 const TS_IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)["'](\.{1,2}\/[^"']+)["']/gm;
 
-/** The project files some other project file imports by a relative path. */
+/** The code files some other code file imports by a relative path. */
 function importedFiles(files: readonly string[], read: (file: string) => string | undefined): Set<string> {
   const all = new Set(files);
   const out = new Set<string>();
   for (const file of files) {
-    if (!TS_CODE.test(file)) continue;
     const text = read(file);
     if (text === undefined) continue;
     for (const m of text.matchAll(TS_IMPORT)) {
@@ -158,7 +156,7 @@ function binds(text: string, name: string): boolean {
 
 /** TypeScript's entrance syntax: a statement goes on through a line that closes a bracket or continues a chain; a script is one no project file imports. */
 export const TYPESCRIPT_ENTRANCES: EntranceSyntax = {
-  isCode: (file) => TS_CODE.test(file) && !/\.d\.ts$/.test(file),
+  isCode: (file) => languageOfFile(file) === "typescript",
   definitionAt: (_lines, start) => start,
   continues: (text) => /^\s*[)\]}.]/.test(text),
   binds,
@@ -166,7 +164,7 @@ export const TYPESCRIPT_ENTRANCES: EntranceSyntax = {
   candidates: typescriptCandidates,
   manifestCandidates: () => [],
   script(file, folder, _read, imported) {
-    if (!TS_CODE.test(file) || /\.d\.ts$/.test(file) || imported.has(file)) return undefined;
+    if (imported.has(file)) return undefined;
     return { file, line: 1, symbol: "", rule: "script", why: `a script directly under ${folder}/ that no project file imports` };
   },
   importedAmong: importedFiles,

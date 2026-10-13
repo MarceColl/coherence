@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 import { editContext } from "../lifecycle/hook.ts";
+import { isSourceFile } from "../economy/source.ts";
 import { DEFAULT_TEST_FOLDERS, languageOfFile, readEnforcementConfig, setupClaims } from "./config.ts";
 import { loadRuns } from "./record.ts";
 import { performRun } from "./run.ts";
@@ -180,6 +181,10 @@ test("a multi-language config lists its languages and test setups; a file's lang
   assert.equal(languageOfFile("frontend/view.tsx", config.languages), "typescript");
   assert.equal(languageOfFile("frontend/types.d.ts", config.languages), undefined);
   assert.equal(languageOfFile("frontend/view.ts", ["python"]), undefined, "a language the project does not list is no file's");
+  assert.equal(languageOfFile("backend/store.pyi"), "python", "a stub is Python's");
+  // A reader that reads fewer of a language's files narrows languageOfFile, never answers on its own.
+  assert.ok(isSourceFile("backend/store.py", "python") && !isSourceFile("backend/store.pyi", "python") && !isSourceFile("frontend/view.tsx", "python"));
+  assert.ok(isSourceFile("frontend/view.tsx", "typescript") && !isSourceFile("frontend/view.js", "typescript") && !isSourceFile("frontend/types.d.ts", "typescript"));
   assert.ok(setupClaims(config.tests[0]!, "backend/test_store.py") && !setupClaims(config.tests[0]!, "frontend/tokens.test.ts"));
   assert.ok(setupClaims({ ...config.tests[1]!, files: ["frontend/**/*.test.ts"] }, "frontend/a/b.test.ts"));
   assert.equal(languageSlot(root, "typescript"), "typescript");

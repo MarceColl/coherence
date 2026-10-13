@@ -10,18 +10,25 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { isTestPath } from "../adapters/adapter.ts";
 import { walkBounds, walkedProjectFiles } from "../adapters/project-files.ts";
 import type { Language } from "../adapters/index.ts";
+import { languageOfFile } from "../adapters/language-files.ts";
 import type { Component, SpecModel } from "../spec/model.ts";
 import { PYTHON_SOURCE } from "./python-source.ts";
 import { TYPESCRIPT_SOURCE } from "./typescript-source.ts";
 
-const EXTENSIONS: Record<Language, readonly string[]> = {
-  typescript: [".ts", ".tsx", ".mts", ".cts"],
-  python: [".py"],
+/**
+ * What the scan leaves out of a language's files (languageOfFile): TypeScript's
+ * JavaScript, so its source is the files the TypeScript adapter reads as source
+ * (SOURCE_EXTENSIONS in adapters/typescript.ts); Python's stubs, which restate
+ * the names their module declares and would count each one twice.
+ */
+const NOT_SOURCE: Record<Language, RegExp> = {
+  typescript: /\.[cm]?jsx?$/,
+  python: /\.pyi$/,
 };
 
+/** Whether a file is source the plain scan reads for the language. */
 export function isSourceFile(file: string, language: Language): boolean {
-  if (/\.d\.ts$/.test(file)) return false;
-  return EXTENSIONS[language].some((ext) => file.endsWith(ext));
+  return languageOfFile(file, [language]) === language && !NOT_SOURCE[language].test(file);
 }
 
 /**
