@@ -50,12 +50,15 @@ export const CANDIDATE_RULES: Record<Language, readonly { rule: string; plural: 
     { rule: "console script", plural: "console scripts", detects: "a function pyproject.toml's [project.scripts] or [tool.poetry.scripts] names" },
     { rule: "script", plural: "scripts", detects: "a file directly under a top-level scripts/ folder with an if __name__ == \"__main__\" block" },
   ],
+  // Rust is not read by this reading yet: no rule is listed, and NOT_DETECTED says so.
+  rust: [],
 };
 
 /** What the rules do not see, per language: said wherever the coverage is, so an absence is never read as none. */
 export const NOT_DETECTED: Record<Language, string> = {
   typescript: "file routes outside a Next.js app/**/page without server handlers (their work enters through server functions), hand-written dispatchers, message consumers, workers and host callbacks are not detected",
   python: "views reached only through include(), hand-written dispatchers, message consumers and signal handlers are not detected",
+  rust: "Rust is not read by this reading yet: no Rust entrance is detected",
 };
 
 /** A recorded reading's language, by name: its rules, or none for a name no language goes by. */

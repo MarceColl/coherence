@@ -24,7 +24,7 @@ import { readFileSync } from "node:fs";
 import { posix, resolve } from "node:path";
 import { parseName } from "../adapters/adapter.ts";
 import { configIgnore, exclusionSummary, walkBounds, walkedProjectFiles } from "../adapters/project-files.ts";
-import { allLanguagesRead, languagesReadLine, type LanguagesRead } from "../readings/scope/languages-read.ts";
+import { languagesReadLine, scannedLanguagesRead, type LanguagesRead } from "../readings/scope/languages-read.ts";
 import { languageOfFile, readEnforcementConfig } from "../enforcement/config.ts";
 import { loadSpecModel, type ModelInvariant, type SpecModel } from "../spec/model.ts";
 import { componentOf, declarationsOf, isSourceFile, isTest, sourceFiles } from "./source.ts";
@@ -131,8 +131,8 @@ function reachOf(invariant: ModelInvariant, files: readonly { file: string; name
 export function computeMass(rootGiven: string, options: MassOptions = {}): MassReport {
   const root = resolve(rootGiven);
   const config = readEnforcementConfig(root);
-  // Every declared language, each file read in its own: a multi-language project's mass is the mass of all its code.
-  const languages = allLanguagesRead(config);
+  // Every declared language a scan reads, each file read in its own: a multi-language project's mass is the mass of all its code, and a language no scan reads yet is named as not read.
+  const languages = scannedLanguagesRead(config);
   const model = options.model ?? loadSpecModel(root);
   const ignore = configIgnore(root);
   const all = languages.read.length === 1 ? sourceFiles(root, languages.read[0]!, ignore) : [...new Set(languages.read.flatMap((l) => sourceFiles(root, l, ignore)))].sort();

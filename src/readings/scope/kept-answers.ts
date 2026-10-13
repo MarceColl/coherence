@@ -46,6 +46,7 @@ import type { Language } from "../../adapters/index.ts";
 import { closureOf } from "../../enforcement/code-fingerprint.ts";
 import type { KeptReport } from "./model.ts";
 import { pythonKeptModules } from "./python-scope.ts";
+import { rustKeptModules } from "./rust-scope.ts";
 import { typescriptKeptModules } from "./typescript-scope.ts";
 
 /** Where each language's kept answers live: transient, beside the recorded reading. */
@@ -57,6 +58,7 @@ const KEPT_VERSION = 1;
 const KEPT_EXTENSIONS: Record<Language, readonly string[]> = {
   typescript: [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
   python: [".py", ".pyi"],
+  rust: [".rs"],
 };
 
 /** The project files besides source that a server's answers rest on: language configuration, manifests and lockfiles, by base name. */
@@ -83,6 +85,7 @@ const TOKEN = /[A-Za-z_$][A-Za-z0-9_$]*/g;
 const KEPT_MODULES: Record<Language, (file: string, text: string) => string[]> = {
   typescript: typescriptKeptModules,
   python: pythonKeptModules,
+  rust: rustKeptModules,
 };
 
 /** One kept answer and what it depends on: the files it names and the names that, spelled in a changed file, could change it. */

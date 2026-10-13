@@ -85,16 +85,17 @@ import { adapterFor, type Language } from "../../adapters/index.ts";
 import { componentOf, declarationsOf, isSourceFile, isTest } from "../../economy/source.ts";
 import { languageOfFile, readEnforcementConfig } from "../../enforcement/config.ts";
 import { KeptAnswers } from "./kept-answers.ts";
-import { languagesRead } from "./languages-read.ts";
+import { languagesRead, notScannedYet } from "./languages-read.ts";
 import { isModuleHandler } from "../../spec/grammar.ts";
 import { declaresAtTop, loadSpecModel, type SpecModel } from "../../spec/model.ts";
 import type { EntranceGuard, EntranceResolution, InterfaceReading, InterfaceSymbol, KeptReport, ReachReference, ScopedReading } from "./model.ts";
 import { PYTHON_INTERFACES } from "./python-scope.ts";
+import { RUST_INTERFACES } from "./rust-scope.ts";
 import { TYPESCRIPT_INTERFACES } from "./typescript-scope.ts";
 
 /**
  * What the reading knows of one language's syntax without its server, each
- * language's in its own module (typescript-scope.ts, python-scope.ts): a
+ * language's in its own module (typescript-scope.ts, python-scope.ts, rust-scope.ts): a
  * language INTERFACE_SYNTAX lacks fails to compile, never reads as another
  * language.
  */
@@ -117,6 +118,7 @@ export interface InterfaceSyntax {
 const INTERFACE_SYNTAX: Record<Language, InterfaceSyntax> = {
   typescript: TYPESCRIPT_INTERFACES,
   python: PYTHON_INTERFACES,
+  rust: RUST_INTERFACES,
 };
 
 /** Whether a declaration line declares a type only (an interface or a type alias): a route never follows one. */
@@ -235,6 +237,7 @@ export function guardsOf(start: string, nodes: ReadonlyMap<string, ReachNode>, c
 const SITE_EXTENSIONS: Record<Language, readonly string[]> = {
   typescript: [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
   python: [".py", ".pyi"],
+  rust: [".rs"],
 };
 
 /** Whether a project-relative file lies inside the bounds: no rule of the walk (exclusionOf) leaves it out. */
@@ -468,7 +471,7 @@ export function budgetFlags(values: ReadonlyMap<string, string>): Partial<Interf
 }
 
 /** A process that is a language server by its command line. */
-const LANGUAGE_SERVER = /pyright|langserver|tsserver|typescript-language-server/;
+const LANGUAGE_SERVER = /pyright|langserver|tsserver|typescript-language-server|rust-analyzer/;
 
 /**
  * The resident memory, in megabytes, of the language server the reading
@@ -752,6 +755,9 @@ function mergeLanguages(languages: readonly Language[], parts: readonly { langua
 
 /** One language's reading (see readComponentInterfaces): its component code, through its adapter (started here when not given). */
 async function readLanguage(root: string, language: Language, given: LanguageAdapter | undefined, options: ReadOptions, part: LanguagePart): Promise<InterfaceReading> {
+  // A language whose declarations and imports no scan reads yet is named as not read, never parsed as another language.
+  const notScanned = notScannedYet(language);
+  if (notScanned !== undefined) return { kind: "unread", because: notScanned };
   const config = readEnforcementConfig(root);
   const { model, budget, started } = part;
   const deadline = started + budget.seconds * 1000;

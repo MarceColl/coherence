@@ -156,6 +156,65 @@ The totality oracle pass runs pytest with `--junitxml={out}` and
 `testFilterForm: "pytest"`: names go to `-k` joined with `or`, and the
 JUnit report (or pytest-json-report's JSON) maps back by test name.
 
+## Rust
+
+`"language": "rust"` grades through rust-analyzer. It is no npm package, so
+it is found on the machine: `COHERENCE_RUST_ANALYZER` first, then `rustup
+which rust-analyzer` from the project root (a `rust-toolchain.toml` is
+honoured), then the first `rust-analyzer` on PATH that answers `--version`.
+rustup's proxy at `~/.cargo/bin` exists without the component and fails only
+when run; a missing server is a reason naming each place looked. Install it
+with `rustup component add rust-analyzer rust-src` (`rust-src` lets it index
+`std`).
+
+Rust's ladder has two rungs:
+
+- **visibility-choked** (the compiler, rustc): the protected item's
+  effective visibility stops short of the crate root. That is its own
+  visibility (private, `pub(self)`, `pub(super)`, `pub(in …)`) narrowed by
+  every module that encloses it, read up the module chain through
+  rust-analyzer's `experimental/parentModule`, so a `pub fn` of a private
+  module is no more reachable than the module. rustc refuses a path to it
+  from outside that scope; inside it, every reference is classified as
+  usual.
+- **reference-choked** (Coherence's check at the edit and in CI): the item
+  is reachable crate-wide (`pub(crate)`, `pub`, or private at the crate
+  root). In a single-crate project the compiler's boundary is the whole
+  project, so it is not credited.
+
+The adapter asks nothing indexed until rust-analyzer reports itself
+quiescent (`experimental/serverStatus`): about 5 s on a small crate, 6 to
+14 s on a 14k-line one. Build scripts and proc macros are on, for
+references inside expanded code; `COHERENCE_RUST_LEAN=1` turns both off for
+a faster start. `checkOnSave` is off, so no check runs cargo.
+
+A site inside a `#[cfg(test)]` or `#[test]` item, or in a file whose module
+is declared under `#[cfg(test)]`, is a test reference, so a unit test module
+beside the chokepoint is not a bypass. A `use` site is an import; a `pub
+use` (or `pub(…) use`) is a re-export, a bypass wherever it stands. A
+module is its file: `src/kernel/mod.rs`, `src/kernel.rs`, or a folder
+(`src/kernel/`, which is its `mod.rs` or sibling `.rs`; a crate folder, which
+is its `src/lib.rs` or `src/main.rs`). A site in a file the module's subtree
+owns is inside the module.
+
+The refutation never touches disk. rust-analyzer does not see an unsaved
+file no module declares, so each synthetic module is staged as a pair: the
+file, and an unsaved overlay of the crate root that declares it. For a
+visibility-choked item the synthetic module `use`s it, and rust-analyzer's
+refusal (E0432 "unresolved import"; rustc says E0603 "is private") is the
+refutation, with a control `use` inside the item's own module that must not
+be refused. Otherwise the synthetic module re-exports it and the
+chokepoint's file gains a use past its range, and both must come back as
+bypasses.
+
+Named limits. rust-analyzer is not rustc: code behind a `cfg` it has not
+enabled, and references inside unexpanded macro input, are unseen, and its
+refusal is E0432 on a `use` only. An item of an `impl` or a trait has no
+`use` path, so its refutation is not run. References from crates outside
+the workspace are unseen. Totality oracles run through `cargo test` one at a
+time (`"test": "cargo test -q -- --exact {filter}"`, `"testMatch": "test
+result: ok\\. [1-9]"`); doctests are not run as `via`s.
+
 ## The run and its view
 
 A run appends one line to `.coherence/runs/<session>.jsonl`: time, session,

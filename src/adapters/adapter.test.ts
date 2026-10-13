@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isTestPath, parseName, rangeContains } from "./adapter.ts";
 import { PYTHON_LADDER, PythonAdapter, ruleCovers, rulesNaming, type CheckerFacts } from "./python.ts";
+import { RUST_LADDER } from "./rust.ts";
 import { TYPESCRIPT_LADDER } from "./typescript.ts";
 
 test("a spec value reads as a bare symbol, a symbol in a file, a module path, or prose", () => {
@@ -42,8 +43,12 @@ test("rangeContains is inclusive at both ends", () => {
   assert.equal(rangeContains(range, { line: 1, character: 40 }), false);
 });
 
-test("the grade ladder's top rung is adapter-defined: TypeScript enforces visibility, Python does not", () => {
+test("the grade ladder's top rung is adapter-defined: TypeScript and Rust enforce visibility, Python does not", () => {
   assert.equal(TYPESCRIPT_LADDER.top, "visibility-choked");
+  assert.equal(RUST_LADDER.top, "visibility-choked");
+  assert.deepEqual(RUST_LADDER.rungs.map((r) => r.grade), ["visibility-choked", "reference-choked"]);
+  assert.equal(RUST_LADDER.rungs.find((r) => r.grade === "visibility-choked")!.enforcer, "the compiler (rustc)");
+  assert.equal(RUST_LADDER.whenVacuous, undefined);
   assert.equal(PYTHON_LADDER.top, "reference-choked");
   assert.match(PYTHON_LADDER.because, /convention/);
   assert.deepEqual(TYPESCRIPT_LADDER.rungs.map((r) => r.grade), ["visibility-choked", "reference-choked"]);

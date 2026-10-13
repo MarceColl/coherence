@@ -57,6 +57,11 @@ jobs:
       - name: Python test tools
         run: npm run test:setup
 
+      # The Rust adapter's server: no npm package, and no default component of the runner's toolchain. A missing one fails rust.test.ts.
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          components: rust-analyzer, rust-src
+
       # Some fixtures commit to throwaway repositories.
       - name: Git identity
         run: |

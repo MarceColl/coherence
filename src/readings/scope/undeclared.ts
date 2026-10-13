@@ -19,7 +19,7 @@
 
 import { posix } from "node:path";
 import type { EntranceCandidate } from "../../adapters/entrance-candidates.ts";
-import { allLanguagesRead, type LanguagesRead } from "./languages-read.ts";
+import { scannedLanguagesRead, type LanguagesRead } from "./languages-read.ts";
 import { readEnforcementConfig } from "../../enforcement/config.ts";
 import { loadSpecModel, type SpecModel } from "../../spec/model.ts";
 import { detectedEntrances } from "./component-interfaces.ts";
@@ -32,14 +32,14 @@ export interface Undeclared {
   covered: number;
   /** In file order. */
   undeclared: EntranceCandidate[];
-  /** Which of the project's languages detection read: every one, by its own rules. */
+  /** Which of the project's languages detection read, each by its own rules, and each with no rules yet named as not read. */
   languages: LanguagesRead;
 }
 
 /** Detect now and measure against a spec model: undefined when nothing is detected. Throws what detection throws. */
 export function undeclaredOf(root: string, model: Pick<SpecModel, "components">): Undeclared | undefined {
   const config = readEnforcementConfig(root);
-  const languages = allLanguagesRead(config);
+  const languages = scannedLanguagesRead(config);
   const candidates = detectedEntrances(root, model, languages.read, config.testFolders);
   const coverage = coverageOf(model.components, candidates);
   if (coverage === undefined || coverage.detected === 0) return undefined;

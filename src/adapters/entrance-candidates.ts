@@ -28,6 +28,7 @@ import { join, posix } from "node:path";
 import type { Language } from "./index.ts";
 import { isTestPath } from "./adapter.ts";
 import { PYTHON_ENTRANCES } from "./python-entrances.ts";
+import { RUST_ENTRANCES } from "./rust-entrances.ts";
 import { TYPESCRIPT_ENTRANCES } from "./typescript-entrances.ts";
 
 /** One entrance the reading detected in the tree. */
@@ -72,11 +73,13 @@ export function escape(name: string): string {
 
 /**
  * What entrance detection knows of one language, each language's in its own
- * module (typescript-entrances.ts, python-entrances.ts): its rules, and the
+ * module (typescript-entrances.ts, python-entrances.ts, rust-entrances.ts): its rules, and the
  * syntax the shared scans below read by. A language ENTRANCE_SYNTAX lacks
  * fails to compile, never reads as another language.
  */
 export interface EntranceSyntax {
+  /** Set when the reading detects none of the language's entrances yet (Rust): detection answers none for it, package.json's included. */
+  undetected?: true;
   /** Whether a project file is code the language's rules read. */
   isCode(file: string): boolean;
   /** Where a definition that starts at `start` reaches its own line: past a Python definition's decorators, the start itself elsewhere. */
@@ -106,6 +109,7 @@ export interface EntranceSyntax {
 const ENTRANCE_SYNTAX: Record<Language, () => EntranceSyntax> = {
   typescript: () => TYPESCRIPT_ENTRANCES,
   python: () => PYTHON_ENTRANCES,
+  rust: () => RUST_ENTRANCES,
 };
 
 /** The lines of the statement or definition that starts at `start` (zero-based): until the next line at or left of its indentation that begins something new. */
@@ -239,6 +243,7 @@ export function detectEntranceCandidates(root: string, options: DetectOptions): 
   };
   const isTest = (file: string): boolean => isTestPath(file, testFolders);
   const syntax = ENTRANCE_SYNTAX[language]();
+  if (syntax.undetected === true) return [];
   const code = files.filter((f) => !isTest(f) && syntax.isCode(f));
   const found: EntranceCandidate[] = [];
   for (const file of code) {

@@ -22,6 +22,7 @@ import type { EnforcementConfig } from "../enforcement/config.ts";
 import type { Language } from "../adapters/index.ts";
 import type { SpecModel } from "../spec/model.ts";
 import { pythonDeclares } from "./python-interfaces.ts";
+import { rustDeclares } from "./rust-interfaces.ts";
 import { typescriptDeclares } from "./typescript-interfaces.ts";
 
 export interface InterfaceSite {
@@ -73,6 +74,7 @@ export function interfaceId(from: string, to: string): string {
 const DECLARES: Record<Language, (line: string) => InterfaceSymbol["declares"]> = {
   typescript: typescriptDeclares,
   python: pythonDeclares,
+  rust: rustDeclares,
 };
 
 /** What a declaration line's keyword says can execute. */

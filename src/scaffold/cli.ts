@@ -40,7 +40,7 @@ import { writeStructurePreview } from "../readings/scope/build.ts";
 import type { StructurePreview } from "../readings/scope/derive.ts";
 import { loadSeed } from "../spec/seed.ts";
 import { readEnforcementConfig } from "../enforcement/config.ts";
-import { allLanguagesRead, languagesReadLine } from "../readings/scope/languages-read.ts";
+import { languagesReadLine, scannedLanguagesRead } from "../readings/scope/languages-read.ts";
 import { cliName } from "../lifecycle/hook.ts";
 import { BUDGET_FLAG_NAMES, BUDGET_FLAGS, budgetFlags, readComponentInterfaces, readingAdapters } from "../readings/scope/component-interfaces.ts";
 import type { ScopedReading } from "../readings/scope/model.ts";
@@ -338,7 +338,7 @@ async function entrancesVerb(argv: string[], io: Io): Promise<void> {
   const measured = undeclaredOf(root, model);
   const undeclared = (measured?.undeclared ?? []).filter((c) => under(c.file, within));
   const groups = proposeEntrances(undeclared, model.components);
-  const languages = measured?.languages ?? allLanguagesRead(readEnforcementConfig(root));
+  const languages = measured?.languages ?? scannedLanguagesRead(readEnforcementConfig(root));
   io.out(renderEntrances({ groups, detected: measured?.detected ?? 0, declared: measured?.declared ?? 0, target: within, levels: model.trustLevels, cli: await cliName(root), languages }));
 }
 

@@ -304,6 +304,8 @@ interface MemberScan {
 const MEMBER_SCANS: Record<Language, MemberScan> = {
   typescript: { opens: /^export\s+(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:interface|type|class)\s.*\{\s*$/, closes: /^[}\]]/, field: /^\s+(?:readonly\s+)?([a-z][A-Za-z0-9]*)\??:\s*[^=]/ },
   python: { opens: /^class\s/, closes: /^\S/, field: /^ {4}([a-z][A-Za-z0-9_]*)\s*:\s*[A-Za-z"'[]/ },
+  // Rust is not read by this reading yet: no line opens a body, so a .rs file's struct fields are not read as TypeScript's.
+  rust: { opens: /(?!)/, closes: /^[}\]]/, field: /(?!)/ },
 };
 
 /**
