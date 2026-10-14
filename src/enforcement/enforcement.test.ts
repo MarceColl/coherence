@@ -22,6 +22,7 @@ import { deriveState } from "../spec/state.ts";
 import { checkChokepoint, classifySite } from "./check.ts";
 import { formatRun, formatStatus, refuteCommand } from "./cli.ts";
 import { readEnforcementConfig } from "./config.ts";
+import { sessionText } from "../journal/shard-fixture.ts";
 import { appendRun, entryKey, latestByEnforcement, latestFor, loadRuns, witnessedRefutations, type RunRecord } from "./record.ts";
 import { mayTouch, performRun } from "./run.ts";
 import { runTotalityOracle } from "./totality.ts";
@@ -359,9 +360,9 @@ test("a run appends one record, never rewrites; spec --check reads the run; the 
   assert.deepEqual(json.invariants.find((entry) => entry.name === "hidden set")!.sites, hiddenEntry.sites, "the JSON run record exposes the classified sites unchanged");
   const printed = formatRun(first);
   assert.match(printed, /digest-only egress\n  chokepoint seal protects SECRET_COLUMNS: broken — fail/);
-  assert.match(printed, /run recorded in \.coherence\/runs\/s1\.jsonl: 5 enforcements, 2 pass, 2 fail, 1 not run/);
+  assert.match(printed, /run recorded in \.coherence\/runs\/s1\.[0-9a-f]{8}\.jsonl: 5 enforcements, 2 pass, 2 fail, 1 not run/);
 
-  const lines = () => readFileSync(join(root, ".coherence", "runs", "s1.jsonl"), "utf8").trimEnd().split("\n");
+  const lines = () => sessionText(join(root, ".coherence", "runs"), "s1").trimEnd().split("\n");
   assert.equal(lines().length, 1);
   const second = await performRun(root, { session: "s1", agent: "enforcement", adapter, form: "chokepoint", invariants: ["hidden set"], now: () => new Date("2026-09-17T11:00:00Z") });
   assert.equal(second.record.invariants.length, 1);
@@ -408,7 +409,7 @@ test("reference-query failures and legacy records never masquerade as confirmed 
   assert.equal(failedEntry.verdict, "not run");
   assert.match(failedEntry.reason, /instrument failed: chokepoint references unavailable/);
   assert.equal(failedEntry.sites, undefined, "a failed second query does not persist the first query as complete evidence");
-  const persistedFailure = JSON.parse(readFileSync(join(root, ".coherence", "runs", "query-failure.jsonl"), "utf8")) as { invariants: Record<string, unknown>[] };
+  const persistedFailure = JSON.parse(sessionText(join(root, ".coherence", "runs"), "query-failure")) as { invariants: Record<string, unknown>[] };
   assert.equal(Object.hasOwn(persistedFailure.invariants[0]!, "sites"), false);
 
   const legacy: RunRecord = {
@@ -447,7 +448,7 @@ test("PostToolUse on a file-writing tool re-checks the invariants that may invol
   assert.doesNotMatch(context.additionalContext, /hidden set/, "an invariant the file cannot involve is not re-checked");
   assert.match(context.additionalContext, /route the reference through the chokepoint, or escalate a retirement for a human/);
   assert.match(context.additionalContext, /escalate "retire <invariant>" .* --session s2 --agent main/);
-  assert.ok(readFileSync(join(root, ".coherence", "runs", "s2.jsonl"), "utf8").trimEnd().split("\n").length === 1, "the edit-time pass is recorded as a run");
+  assert.ok(sessionText(join(root, ".coherence", "runs"), "s2").trimEnd().split("\n").length === 1, "the edit-time pass is recorded as a run");
 
   const reading = await runHook("PostToolUse", { cwd: root, session_id: "s2", tool_name: "Read", tool_input: { file_path: join(root, "src/api/render.ts") } }, root);
   assert.deepEqual(reading, { stdout: "", stderr: "", exit: 0 }, "a reading tool changes nothing");

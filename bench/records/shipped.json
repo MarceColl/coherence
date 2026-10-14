@@ -1,0 +1,52 @@
+{
+  "at": "2026-10-14T13:48:47.015Z",
+  "node": "v22.21.1",
+  "platform": "darwin arm64",
+  "head": "5004785",
+  "reads": {
+    "loadJournal 1x": {
+      "records": 1146,
+      "files": 89,
+      "ms": 5.47
+    },
+    "loadJournal 10x": {
+      "records": 11460,
+      "files": 890,
+      "ms": 59.36
+    },
+    "loadRuns 1x": {
+      "ms": 68.16,
+      "records": 1637
+    }
+  },
+  "appends": {
+    "100 tracked files": {
+      "trackedFiles": 100,
+      "indexBytes": 8097,
+      "bare appendWhole to one file (1.7.x's append)": 0.03,
+      "choosing the shard and keeping its state, line": 0.2,
+      "journal append, line": 0.24,
+      "run append, line": 0.47,
+      "journal append, line, index rewritten each time": 0.29,
+      "choosing the shard and keeping its state, packed": 0.19,
+      "journal append, packed": 0.24,
+      "run append, packed": 0.46,
+      "journal append, packed, index rewritten each time": 0.28,
+      "shards written": 2
+    },
+    "20000 tracked files": {
+      "trackedFiles": 20000,
+      "indexBytes": 1600101,
+      "bare appendWhole to one file (1.7.x's append)": 0.03,
+      "choosing the shard and keeping its state, line": 0.24,
+      "journal append, line": 0.28,
+      "run append, line": 0.56,
+      "journal append, line, index rewritten each time": 0.43,
+      "choosing the shard and keeping its state, packed": 0.23,
+      "journal append, packed": 0.29,
+      "run append, packed": 0.55,
+      "journal append, packed, index rewritten each time": 0.56,
+      "shards written": 2
+    }
+  }
+}

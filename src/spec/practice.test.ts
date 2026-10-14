@@ -5,6 +5,7 @@
  */
 
 import assert from "node:assert/strict";
+import { onlyFile } from "../journal/shard-fixture.ts";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -395,7 +396,7 @@ test("in an adopter, a kernel practice a Coherence release changed asks no amend
   const first = run("enact", kernel, ...steps, ...WHO);
   assert.equal(first.code, 0, first.err.join("\n"));
   // As an earlier release left it: the recorded enactment carried a step the kernel practice no longer has.
-  const file = join(root, ".coherence", "journal", "s1.jsonl");
+  const file = onlyFile(join(root, ".coherence", "journal"), "s1");
   const lines = readFileSync(file, "utf8").split("\n").map((line) => {
     if (!line.includes('"kind":"enactment"')) return line;
     const record = JSON.parse(line) as { steps: { text: string }[] };

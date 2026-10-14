@@ -1,0 +1,410 @@
+{
+  "at": "2026-10-14T12:36:34.527Z",
+  "history": [
+    {
+      "pr": 120,
+      "githubAdditions": 17,
+      "githubDeletions": 0,
+      "githubFiles": 2,
+      "localAdditions": 17,
+      "recordAdditions": 17,
+      "recordFiles": 2,
+      "shardFiles": 2,
+      "recordShareOfAdditions": 100
+    },
+    {
+      "pr": 119,
+      "githubAdditions": 1375,
+      "githubDeletions": 334,
+      "githubFiles": 47,
+      "localAdditions": 1375,
+      "recordAdditions": 32,
+      "recordFiles": 3,
+      "shardFiles": 5,
+      "recordShareOfAdditions": 2
+    },
+    {
+      "pr": 118,
+      "githubAdditions": 853,
+      "githubDeletions": 2,
+      "githubFiles": 9,
+      "localAdditions": 853,
+      "recordAdditions": 2,
+      "recordFiles": 1,
+      "shardFiles": 1,
+      "recordShareOfAdditions": 0
+    },
+    {
+      "pr": 117,
+      "githubAdditions": 1875,
+      "githubDeletions": 48,
+      "githubFiles": 38,
+      "localAdditions": 1875,
+      "recordAdditions": 30,
+      "recordFiles": 5,
+      "shardFiles": 6,
+      "recordShareOfAdditions": 2
+    },
+    {
+      "pr": 116,
+      "githubAdditions": 752,
+      "githubDeletions": 421,
+      "githubFiles": 22,
+      "localAdditions": 752,
+      "recordAdditions": 1,
+      "recordFiles": 1,
+      "shardFiles": 1,
+      "recordShareOfAdditions": 0
+    },
+    {
+      "pr": 111,
+      "githubAdditions": 3092,
+      "githubDeletions": 15,
+      "githubFiles": 8,
+      "localAdditions": 3092,
+      "recordAdditions": 10,
+      "recordFiles": 2,
+      "shardFiles": 2,
+      "recordShareOfAdditions": 0
+    },
+    {
+      "pr": 110,
+      "githubAdditions": 30,
+      "githubDeletions": 12,
+      "githubFiles": 2,
+      "localAdditions": 30,
+      "recordAdditions": 0,
+      "recordFiles": 0,
+      "shardFiles": 0,
+      "recordShareOfAdditions": 0
+    },
+    {
+      "pr": 109,
+      "githubAdditions": 390,
+      "githubDeletions": 72,
+      "githubFiles": 18,
+      "localAdditions": 390,
+      "recordAdditions": 12,
+      "recordFiles": 2,
+      "shardFiles": 2,
+      "recordShareOfAdditions": 3
+    },
+    {
+      "pr": 108,
+      "githubAdditions": 21,
+      "githubDeletions": 5,
+      "githubFiles": 2,
+      "localAdditions": 2,
+      "recordAdditions": 0,
+      "recordFiles": 0,
+      "shardFiles": 0,
+      "recordShareOfAdditions": 0
+    },
+    {
+      "pr": 107,
+      "githubAdditions": 27,
+      "githubDeletions": 6,
+      "githubFiles": 3,
+      "localAdditions": 19,
+      "recordAdditions": 0,
+      "recordFiles": 0,
+      "shardFiles": 0,
+      "recordShareOfAdditions": 0
+    },
+    {
+      "pr": 106,
+      "githubAdditions": 8,
+      "githubDeletions": 3,
+      "githubFiles": 2,
+      "localAdditions": 8,
+      "recordAdditions": 0,
+      "recordFiles": 0,
+      "shardFiles": 0,
+      "recordShareOfAdditions": 0
+    },
+    {
+      "pr": 105,
+      "githubAdditions": 4,
+      "githubDeletions": 1,
+      "githubFiles": 1,
+      "localAdditions": 4,
+      "recordAdditions": 0,
+      "recordFiles": 0,
+      "shardFiles": 0,
+      "recordShareOfAdditions": 0
+    },
+    {
+      "pr": 103,
+      "githubAdditions": 135,
+      "githubDeletions": 35,
+      "githubFiles": 7,
+      "localAdditions": 135,
+      "recordAdditions": 3,
+      "recordFiles": 1,
+      "shardFiles": 2,
+      "recordShareOfAdditions": 2
+    },
+    {
+      "pr": 102,
+      "githubAdditions": 73,
+      "githubDeletions": 27,
+      "githubFiles": 9,
+      "localAdditions": 73,
+      "recordAdditions": 3,
+      "recordFiles": 1,
+      "shardFiles": 1,
+      "recordShareOfAdditions": 4
+    },
+    {
+      "pr": 101,
+      "githubAdditions": 130,
+      "githubDeletions": 48,
+      "githubFiles": 8,
+      "localAdditions": 130,
+      "recordAdditions": 12,
+      "recordFiles": 3,
+      "shardFiles": 3,
+      "recordShareOfAdditions": 9
+    },
+    {
+      "pr": 100,
+      "githubAdditions": 1117,
+      "githubDeletions": 8,
+      "githubFiles": 12,
+      "localAdditions": 1117,
+      "recordAdditions": 29,
+      "recordFiles": 2,
+      "shardFiles": 2,
+      "recordShareOfAdditions": 3
+    },
+    {
+      "pr": 99,
+      "githubAdditions": 146,
+      "githubDeletions": 107,
+      "githubFiles": 9,
+      "localAdditions": 146,
+      "recordAdditions": 3,
+      "recordFiles": 1,
+      "shardFiles": 1,
+      "recordShareOfAdditions": 2
+    },
+    {
+      "pr": 97,
+      "githubAdditions": 438,
+      "githubDeletions": 138,
+      "githubFiles": 36,
+      "localAdditions": 438,
+      "recordAdditions": 11,
+      "recordFiles": 2,
+      "shardFiles": 2,
+      "recordShareOfAdditions": 3
+    },
+    {
+      "pr": 96,
+      "githubAdditions": 2063,
+      "githubDeletions": 6,
+      "githubFiles": 18,
+      "localAdditions": 2063,
+      "recordAdditions": 18,
+      "recordFiles": 2,
+      "shardFiles": 2,
+      "recordShareOfAdditions": 1
+    },
+    {
+      "pr": 95,
+      "githubAdditions": 176,
+      "githubDeletions": 20,
+      "githubFiles": 10,
+      "localAdditions": 176,
+      "recordAdditions": 5,
+      "recordFiles": 2,
+      "shardFiles": 2,
+      "recordShareOfAdditions": 3
+    },
+    {
+      "pr": 93,
+      "githubAdditions": 100,
+      "githubDeletions": 8,
+      "githubFiles": 8,
+      "localAdditions": 100,
+      "recordAdditions": 33,
+      "recordFiles": 2,
+      "shardFiles": 2,
+      "recordShareOfAdditions": 33
+    },
+    {
+      "pr": 92,
+      "githubAdditions": 393,
+      "githubDeletions": 64,
+      "githubFiles": 14,
+      "localAdditions": 393,
+      "recordAdditions": 27,
+      "recordFiles": 3,
+      "shardFiles": 3,
+      "recordShareOfAdditions": 7
+    },
+    {
+      "pr": 91,
+      "githubAdditions": 249,
+      "githubDeletions": 89,
+      "githubFiles": 14,
+      "localAdditions": 249,
+      "recordAdditions": 27,
+      "recordFiles": 2,
+      "shardFiles": 2,
+      "recordShareOfAdditions": 11
+    },
+    {
+      "pr": 90,
+      "githubAdditions": 420,
+      "githubDeletions": 76,
+      "githubFiles": 18,
+      "localAdditions": 420,
+      "recordAdditions": 22,
+      "recordFiles": 3,
+      "shardFiles": 3,
+      "recordShareOfAdditions": 5
+    },
+    {
+      "pr": 89,
+      "githubAdditions": 4,
+      "githubDeletions": 3,
+      "githubFiles": 3,
+      "localAdditions": 4,
+      "recordAdditions": 1,
+      "recordFiles": 1,
+      "shardFiles": 1,
+      "recordShareOfAdditions": 25
+    },
+    {
+      "pr": 88,
+      "githubAdditions": 230,
+      "githubDeletions": 39,
+      "githubFiles": 9,
+      "localAdditions": 230,
+      "recordAdditions": 16,
+      "recordFiles": 2,
+      "shardFiles": 2,
+      "recordShareOfAdditions": 7
+    },
+    {
+      "pr": 86,
+      "githubAdditions": 109,
+      "githubDeletions": 29,
+      "githubFiles": 10,
+      "localAdditions": 109,
+      "recordAdditions": 9,
+      "recordFiles": 1,
+      "shardFiles": 1,
+      "recordShareOfAdditions": 8
+    },
+    {
+      "pr": 84,
+      "githubAdditions": 122,
+      "githubDeletions": 7,
+      "githubFiles": 3,
+      "localAdditions": 122,
+      "recordAdditions": 0,
+      "recordFiles": 0,
+      "shardFiles": 0,
+      "recordShareOfAdditions": 0
+    },
+    {
+      "pr": 83,
+      "githubAdditions": 1708,
+      "githubDeletions": 5,
+      "githubFiles": 25,
+      "localAdditions": 1708,
+      "recordAdditions": 46,
+      "recordFiles": 5,
+      "shardFiles": 6,
+      "recordShareOfAdditions": 3
+    },
+    {
+      "pr": 82,
+      "githubAdditions": 139,
+      "githubDeletions": 21,
+      "githubFiles": 8,
+      "localAdditions": 139,
+      "recordAdditions": 27,
+      "recordFiles": 2,
+      "shardFiles": 2,
+      "recordShareOfAdditions": 19
+    }
+  ],
+  "historyTotals": {
+    "prs": 30,
+    "githubAdditions": 16196,
+    "localAdditions": 16169,
+    "recordAdditions": 396,
+    "githubFiles": 375,
+    "recordFiles": 51,
+    "shardFiles": 56
+  },
+  "probe": {
+    "pr": 121,
+    "totals": {
+      "additions": 1875,
+      "changedFiles": 12,
+      "deletions": 0
+    },
+    "files": [
+      {
+        "file": ".gitattributes",
+        "attributes": "(none)",
+        "additions": 7,
+        "deletions": 0,
+        "patchRendered": true
+      },
+      {
+        "file": "binary.jsonl",
+        "attributes": "binary",
+        "additions": 20,
+        "deletions": 0,
+        "patchRendered": true
+      },
+      {
+        "file": "generated-nodiff.jsonl",
+        "attributes": "linguist-generated=true -diff",
+        "additions": 20,
+        "deletions": 0,
+        "patchRendered": true
+      },
+      {
+        "file": "generated.jsonl",
+        "attributes": "linguist-generated=true",
+        "additions": 20,
+        "deletions": 0,
+        "patchRendered": true
+      },
+      {
+        "file": "nodiff.jsonl",
+        "attributes": "-diff",
+        "additions": 20,
+        "deletions": 0,
+        "patchRendered": true
+      },
+      {
+        "file": "packed.jsonl",
+        "attributes": "(none)",
+        "additions": 1,
+        "deletions": 0,
+        "patchRendered": true
+      },
+      {
+        "file": "plain.jsonl",
+        "attributes": "(none)",
+        "additions": 20,
+        "deletions": 0,
+        "patchRendered": true
+      },
+      {
+        "file": "undriven.jsonl",
+        "attributes": "diff=coherence-records",
+        "additions": 20,
+        "deletions": 0,
+        "patchRendered": true
+      }
+    ]
+  }
+}

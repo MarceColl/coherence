@@ -1,6 +1,6 @@
 # Journal
 
-Compression: one append-only file per session of attributed, durable outcomes, read back as one timeline.
+Compression: append-only files per session of attributed, durable outcomes, a new one for each commit a checkout writes from, read back as one timeline.
 
 ## invariants
 - a citation reaches another branch: A --cite of a record another branch has committed is accepted and printed with that branch, journal <id> shows such a record as it stands there and says where, and a citation of it names its branch; an id found neither in the stores nor on any branch is still refused.
@@ -26,7 +26,7 @@ Compression: one append-only file per session of attributed, durable outcomes, r
 - append-only store: A journal file is only appended: a second write never changes the first line, and no path rewrites or deletes a record.
   protects: journalDir
   chokepoint: src/journal/store.ts
-  over: every session file under .coherence/journal
+  over: every session file and shard under .coherence/journal
   via: append only: a second write never changes the first line
   because: a record a later session reads back is worth reading only if no earlier record could have been edited; the verbs that answer a record point at it instead, and the one module that knows where the journal lives exposes an append and a read, nothing that rewrites
   crossing: project-source -> record
@@ -247,6 +247,30 @@ Compression: one append-only file per session of attributed, durable outcomes, r
   because: RECORD_STORES named journal, runs and work beside the folders each store module, Scope live and the records summary declared for themselves, so a store added or renamed and left out of it would never be committed, would get no union merge and no live refresh, and nothing would fail (df-7bbcdfc5)
   crossing: project-source -> record
   refuted: gave project.ts its own list of the record stores again, RECORD_STORES = ["journal", "runs", "work"] in place of the table's folders -> "every record store is committed, merged by union, followed live, read for words when it holds prose, and summarized from the one table, and no module names a store's folder again" went red in stores.test.ts on its own assertion; restored (cmp), green batched and alone (2026-10-11)
+  kinds: none
+- a committed shard is never appended again: Every record store's writer appends to its last shard, `<session>.<token>.jsonl`, only while HEAD names the same commit on the same branch, HEAD's reflog has not grown, the shard is the size the writer left it and under its size limit, and git's index does not hold it; otherwise it starts a new shard with a new token, so once a stage or a commit holds a shard nothing appends to it again.
+  over: the journal, the work orders and the runs written through their own writers in a git repository, across a commit, a new branch at the same commit, a stage with no commit, a commit and a mixed reset back to the commit before it, and a shard at its size limit
+  via: a writer starts a new shard when HEAD, the branch or the size limit moved, and never appends to a shard a commit holds
+  because: GitHub's merge honours no merge driver (d-44ee2214), so two branches of one session that append to one file conflict on GitHub and its CI runs none of its jobs; a shard that a commit seals is only ever on one side of a merge (d-3a125a06), and sealing on HEAD rather than on the branch alone closes a stacked branch landed after its parent was squashed (d-fe8a26f3)
+  crossing: project-source -> record
+  kinds: none
+- lost shard state never reuses a committed shard: The writer's kept shard state is a hint: a state that is missing, torn or not in its shape starts a new shard, and a state that names a shard a commit holds, with the HEAD, branch, reflog, index identity and size the writer sees now, still starts a new one, because git's index is searched whenever it was written at or after the shard's last write.
+  over: a state removed, a state cut off mid-object, a state of the wrong shape, and a state rewritten after a commit to name the committed shard with everything else current; and a writer outside any git checkout
+  via: a lost, torn or wrong shard state starts a new shard, and a state that names a committed shard at the current HEAD still never appends to it
+  because: conjecture c-e23e2e42 asked whether lost shard state could make two branches write one file; the state is per checkout and transient, so the seal must rest on git's own files, never on the state alone, and every doubt must cost one more shard rather than a write into a file a commit holds
+  crossing: record -> project-source
+  kinds: none
+- readers read packed shards: Every reader of the record stores reads a packed shard, `<session>.<token>.jsonseq`, led by U+001E with each record ended by one, as it reads a line shard: the journal, the work orders, the runs, the run index, the peer feed's stat pass, the citation search on another branch, the CI records summary and the status line; a torn packed record is one damaged record and the next reads whole.
+  over: two sessions' records in every store, one written packed and one in lines, with a torn packed record, an enactment in the packed shard, and the packed shard committed on another branch
+  via: every reader reads a packed shard's records as a line shard's: the journal, the runs, the work orders, the run index, the citation search, the records summary and the status line
+  because: packing makes a shard one line, which GitHub counts as one, but only a release whose readers split on the separator may write it (d-d5b49709), so the readers ship first; the extension is not .jsonl, so a 1.7.x reader skips a packed shard instead of reading it as one damaged line
+  crossing: record -> reading
+  kinds: none
+- packed writing is off by default: Writers write line shards unless packed writing is turned on (COHERENCE_PACKED_RECORDS=1, or PACKED_BY_DEFAULT in journal/shards.ts); turned on, appends at one HEAD go to one packed shard, a byte append that keeps it one line led by the separator.
+  over: every store written with packed writing left at its default and then turned on, three records each
+  via: writers write line shards unless packed writing is turned on, and a packed shard holds one line
+  because: a release before this one skips a packed shard's records, so packed writing waits for the release after the one that ships its readers, at the owner's call (docs/records-layout.md, Turning packed writing on)
+  crossing: project-source -> record
   kinds: none
 - a record field's role is declared once: Whether each field of each journal and work record is the writer's prose, a quoted refusal, or bookkeeping is declared once, in RECORD_ROLES beside the record types, keyed by each type's own fields so a field without a role fails to compile; the vocabulary check reads the prose and lexicon coverage the prose and the quoted, both through recordWords, and a field no type declares is read as prose.
   over: a record of every kind in both stores holding a distinct string in every field its type declares, nested lists, maps and objects included, and one field no type declares, read by the check and by coverage; an enactment's outcomes and a close's verdicts

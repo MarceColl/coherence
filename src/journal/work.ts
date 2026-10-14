@@ -2,7 +2,7 @@
  * The work store: where work orders live, how they are read back, and the
  * binding inference every journal write and every run goes through.
  *
- * One JSONL file per writing session under .coherence/work, append only,
+ * Sealed shards per writing session under .coherence/work (shards.ts), append only,
  * with the journal's conventions: id, at, session, agent, commit, dirty. An
  * order is the fold of its records in time order: the order record sets the
  * content and the first owner; moves and the close set its state;
@@ -20,7 +20,8 @@ import { join } from "node:path";
 import { appendWhole, storeLines } from "./append.ts";
 import { JournalError } from "./args.ts";
 import { isWorkKind, TERMINAL_STATES, type WorkRecord, type WorkState } from "./record.ts";
-import { storeDir } from "./stores.ts";
+import { shardFor } from "./shards.ts";
+import { isStoreFile, storeDir } from "./stores.ts";
 
 export const WORK_DIR = storeDir("work");
 
@@ -38,12 +39,14 @@ export function workFile(cwd: string, session: string): string {
   return join(workDir(cwd), `${session}.jsonl`);
 }
 
-/** Append one work record as one line. The file and directory are created on first write. */
+/** Append one work record to the session's shard (shards.ts); the file and directory are created on first write. Returns the shard's path. */
 export function appendWork(cwd: string, record: WorkRecord): string {
-  const file = workFile(cwd, record.session);
+  workFile(cwd, record.session);
   mkdirSync(workDir(cwd), { recursive: true });
-  appendWhole(file, `${JSON.stringify(record)}\n`);
-  return file;
+  const shard = shardFor(cwd, "work", record.session);
+  appendWhole(shard.file, `${JSON.stringify(record)}\n`);
+  shard.kept();
+  return shard.file;
 }
 
 export interface WorkDamaged {
@@ -69,7 +72,7 @@ export function loadWork(cwd: string): LoadedWork {
   const loaded: LoadedWork = { records: [], damaged: [] };
   if (!existsSync(dir)) return loaded;
   const seen = new Set<string>();
-  for (const name of readdirSync(dir).filter((n) => n.endsWith(".jsonl")).sort()) {
+  for (const name of readdirSync(dir).filter(isStoreFile).sort()) {
     for (const { line, number } of storeLines(readFileSync(join(dir, name), "utf8"), seen)) {
       const verdict = parseWorkLine(line);
       if (typeof verdict === "string") loaded.damaged.push({ file: join(WORK_DIR, name), line: number, reason: verdict });

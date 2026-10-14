@@ -51,7 +51,7 @@ import {
 import { loadSpecModel, projectPractices } from "../spec/model.ts";
 import { originFields } from "./defects.ts";
 import { amendCommand, floorGaps, type ModelPractice } from "../spec/practices.ts";
-import { JOURNAL_DIR, appendRecord, gitState, loadJournal, type Loaded } from "./store.ts";
+import { appendRecordTo, gitState, loadJournal, type Loaded } from "./store.ts";
 import { describeBinding, loadWork } from "./work.ts";
 import { recordsOnOtherBranches } from "./branches.ts";
 import { recordDefectTelemetry } from "../lifecycle/telemetry.ts";
@@ -155,11 +155,11 @@ function humanWords(parsed: Parsed): { human?: string } {
 
 function write(ctx: Context, record: JournalRecord, extra: string[] = []): Written {
   vetted(ctx, record);
-  const written = appendRecord(ctx.cwd, record);
+  const { record: written, file } = appendRecordTo(ctx.cwd, record);
   return {
     record: written,
     lines: [
-      `${written.id}  ${written.kind} recorded in ${JOURNAL_DIR}/${written.session}.jsonl`,
+      `${written.id}  ${written.kind} recorded in ${file}`,
       `  ${describeBinding({ binding: written.binding ?? "none: unsettled", ...(written.work === undefined ? {} : { work: written.work }) })}`,
       ...(citesOf(written).length > 0 ? [`  cites ${citedWhere(ctx.cwd, citesOf(written)).join(", ")}`] : []),
       ...extra,

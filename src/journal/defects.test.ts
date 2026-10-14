@@ -6,6 +6,7 @@
  */
 
 import assert from "node:assert/strict";
+import { sessionText } from "./shard-fixture.ts";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -146,12 +147,12 @@ test("classify folds into the defect without editing it: a later classification 
   const root = project();
   const j = journal(root, clock("2026-10-03T00:00:00Z"));
   const d = idOf(j("defect", "the knob stuck", "--evidence", "turned it", "--caught", "self", ...WHO));
-  const line = readFileSync(join(root, ".coherence", "journal", "s1.jsonl"), "utf8");
+  const line = sessionText(join(root, ".coherence", "journal"), "s1");
   const first = idOf(j("classify", d, "--class", "cost", "--introduced", "pre-existing", "--because", "the first reading", ...WHO));
   const second = idOf(j("classify", d, "--class", "silent-skip", "--because", "a closer reading", ...WHO));
   const wrong = idOf(j("classify", d, "--caught", "probe", "--because", "misread", ...WHO));
   idOf(j("retract", wrong, "--because", "the session that made it caught it", ...WHO));
-  assert.ok(readFileSync(join(root, ".coherence", "journal", "s1.jsonl"), "utf8").startsWith(line), "the defect's line is untouched");
+  assert.ok(sessionText(join(root, ".coherence", "journal"), "s1").startsWith(line), "the defect's line is untouched");
   const records = loadJournal(root).records;
   const decision = records.find((r) => r.id === first) as Decision;
   assert.equal(decision.kind, "decision");

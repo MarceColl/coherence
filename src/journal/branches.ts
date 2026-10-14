@@ -10,6 +10,7 @@
 
 import { spawnSync } from "../lifecycle/work-meter.ts";
 import { JOURNAL_DIR } from "./store.ts";
+import { recordTexts } from "./stores.ts";
 import { WORK_DIR } from "./work.ts";
 
 /** Where a record was found: the branch, the file, and the record's JSON line. */
@@ -39,11 +40,13 @@ export function recordsOnOtherBranches(cwd: string, ids: readonly string[]): Map
     const refEnd = hit.indexOf(":");
     const fileEnd = hit.indexOf(":", refEnd + 1);
     if (refEnd === -1 || fileEnd === -1) continue;
-    const line = hit.slice(fileEnd + 1);
-    const id = /^\{"id":"([^"]+)"/.exec(line)?.[1];
-    if (id === undefined || found.has(id) || !wanted.includes(id)) continue;
-    const ref = hit.slice(0, refEnd);
-    found.set(id, { branch: ref.replace(/^refs\/(heads|remotes)\//, ""), file: hit.slice(refEnd + 1, fileEnd), line });
+    // A packed shard is one line of records each ended by the separator: each is matched alone.
+    for (const line of recordTexts(hit.slice(fileEnd + 1))) {
+      const id = /^\{"id":"([^"]+)"/.exec(line)?.[1];
+      if (id === undefined || found.has(id) || !wanted.includes(id)) continue;
+      const ref = hit.slice(0, refEnd);
+      found.set(id, { branch: ref.replace(/^refs\/(heads|remotes)\//, ""), file: hit.slice(refEnd + 1, fileEnd), line });
+    }
   }
   return found;
 }

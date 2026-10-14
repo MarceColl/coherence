@@ -63,7 +63,10 @@ interface Step {
   stdin?: string;
 }
 
-/** Every file Coherence keeps under the project's .coherence, relative, sorted. */
+/** A shard's random token (journal/shards.ts), which differs between two copies. */
+const SHARD_TOKEN = /\.[0-9a-f]{8}\.(jsonl|jsonseq)\b/g;
+
+/** Every file Coherence keeps under the project's .coherence, relative, sorted; a shard's token as <token>. */
 function records(root: string): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
@@ -71,7 +74,7 @@ function records(root: string): string[] {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) walk(path);
-      else out.push(relative(root, path));
+      else out.push(relative(root, path).replace(SHARD_TOKEN, ".<token>.$1"));
     }
   };
   walk(join(root, ".coherence"));
@@ -83,6 +86,7 @@ function plain(text: string, root: string, home: string): string {
   return text
     .replaceAll(root, "<root>")
     .replaceAll(home, "<home>")
+    .replace(SHARD_TOKEN, ".<token>.$1")
     .replace(/\b([a-z]{1,3})-[0-9a-f]{8}\b/g, "$1-<id>")
     .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?Z?)?/g, "<time>")
     .replace(/\b\d+(\.\d+)? ?m?s\b/g, "<ms>");

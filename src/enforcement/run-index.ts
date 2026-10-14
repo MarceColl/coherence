@@ -28,7 +28,7 @@
 import { closeSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { cacheDir, storeVersion, withLock, writeKept } from "../lifecycle/kept-parse.ts";
-import { storeDir } from "../journal/stores.ts";
+import { RECORD_SEPARATOR, isPacked, isStoreFile, storeDir } from "../journal/stores.ts";
 
 /** The shape of the index; one of another shape, or one other code made, is rebuilt. */
 const INDEX_SHAPE = "run-index-3";
@@ -78,7 +78,7 @@ function runFiles(root: string): Map<string, { identity: string; size: number }>
   const out = new Map<string, { identity: string; size: number }>();
   let names: string[];
   try {
-    names = readdirSync(join(root, RUN_FILES)).filter((n) => n.endsWith(".jsonl")).sort();
+    names = readdirSync(join(root, RUN_FILES)).filter(isStoreFile).sort();
   } catch {
     return out;
   }
@@ -124,10 +124,10 @@ function readFrom(root: string, latest: Record<string, Latest>, name: string, fr
     closeSync(fd);
   }
   // Only whole lines: a line still being written is read at the next look.
-  const end = buffer.lastIndexOf(0x0a);
+  const end = buffer.lastIndexOf(isPacked(name) ? 0x1e : 0x0a);
   if (end < 0) return from;
   let offset = from;
-  for (const line of buffer.subarray(0, end + 1).toString("utf8").split("\n")) {
+  for (const line of buffer.subarray(0, end + 1).toString("utf8").split(isPacked(name) ? RECORD_SEPARATOR : "\n")) {
     if (line.trim() !== "") fold(latest, name, offset, line, parse);
     offset += Buffer.byteLength(line, "utf8") + 1;
   }

@@ -7,6 +7,7 @@
  */
 
 import assert from "node:assert/strict";
+import { sessionFiles } from "../journal/shard-fixture.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -276,7 +277,7 @@ test("run at a registry's top runs each listed project from its own folder, its 
     assert.match(ran.stdout, /^project products\/a:\n {2}\.\/a door\n[\s\S]*^project products\/b:\n {2}\.\/b door\n {4}chokepoint door protects ROWS: broken/m);
     assert.doesNotMatch(ran.stdout, /stray/, "a folder the registry does not list is not run");
     assert.ok(!existsSync(join(top, ".coherence")), "nothing is recorded at the top");
-    for (const leaf of ["products/a", "products/b"]) assert.ok(existsSync(join(top, leaf, ".coherence", "runs", "ci-1.jsonl")), `${leaf} keeps its own run`);
+    for (const leaf of ["products/a", "products/b"]) assert.ok(sessionFiles(join(top, leaf, ".coherence", "runs"), "ci-1").length > 0, `${leaf} keeps its own run`);
 
     const report = await buildReport(top, "ci-1", async () => ({ gaps: [] }));
     assert.deepEqual(report.unfinished, [], "the report finds each project's run of the session");
