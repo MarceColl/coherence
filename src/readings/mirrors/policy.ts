@@ -119,6 +119,14 @@ export function proposalsOf(groups: readonly Group[]): ProposedPair[] {
 
 /* ---------------------------------------------------------------- text */
 
+/** What the reading parses, said wherever it names what it did not read. */
+export const PARSED_LANGUAGES = "TypeScript, JavaScript and Markdown";
+
+/** The files left unread for their language, most first: "4123 .py files, 3 .rs files"; "" when none were. */
+export function unreadText(unread: Readonly<Record<string, number>>): string {
+  return Object.entries(unread).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).map(([ext, n]) => `${n} ${ext} file${n === 1 ? "" : "s"}`).join(", ");
+}
+
 export function where(s: SetRef): string {
   return `${s.file}${s.line > 0 ? `:${s.line}` : ""} ${s.name} [${s.form}${s.checked ? ", checked" : ""}]`;
 }
@@ -151,8 +159,9 @@ export function readingText(reading: MirrorReading, options: { all?: boolean; li
   const shown = options.all === true ? reading.groups : reading.groups.filter(surfaced);
   const limited = options.limit === undefined ? shown : shown.slice(0, options.limit);
   const surfacedCount = reading.groups.filter(surfaced).length;
+  const unread = unreadText(reading.unread);
   const lines = [
-    `mirror reading at ${reading.commit.slice(0, 7)} (${reading.rev}): ${reading.sets} sets, ${reading.groups.length} groups, ${surfacedCount} worth a look (cross-file, ${SURFACE_SHARED} or more shared names, score ${SURFACE_SCORE} or more), in ${reading.ms} ms`,
+    `mirror reading at ${reading.commit.slice(0, 7)} (${reading.rev}): ${reading.sets} sets, ${reading.groups.length} groups, ${surfacedCount} worth a look (cross-file, ${SURFACE_SHARED} or more shared names, score ${SURFACE_SCORE} or more), in ${reading.ms} ms${unread === "" ? "" : `; not read: ${unread} (the reading parses ${PARSED_LANGUAGES})`}`,
     "Advisory: hand lists are never a spec problem and never block. --all lists every group.",
   ];
   const alarms = alarmsOf(reading.groups);

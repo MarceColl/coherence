@@ -19,12 +19,13 @@ import { spawn } from "../../lifecycle/work-meter.ts";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Finding, Group, MirrorReading } from "./model.ts";
-import { alarmsOf, alarmText, surfaced } from "./policy.ts";
+import { alarmsOf, alarmText, PARSED_LANGUAGES, surfaced, unreadText } from "./policy.ts";
 
 /** Where the kept reading and the refresh mark live: transient, never committed. */
 export const MIRRORS_DIR = join(".coherence", "mirrors");
 
-const RECORD_VERSION = 1;
+/** 2: the reading counts the code files it read and the files it left unread for their language. */
+const RECORD_VERSION = 2;
 
 export interface RecordedMirrors {
   version: number;
@@ -34,6 +35,10 @@ export interface RecordedMirrors {
   at: string;
   ms: number;
   sets: number;
+  /** The code files the reading parsed. */
+  read: number;
+  /** The tracked files in a language it does not parse, by extension. */
+  unread: Record<string, number>;
   /** How many groups the reading had in all. */
   groups: number;
   /** The groups the threshold policy puts in front of the agent, in rank order. */
@@ -61,6 +66,8 @@ export function recordMirrors(root: string, reading: MirrorReading, now: () => D
     at: now().toISOString(),
     ms: reading.ms,
     sets: reading.sets,
+    read: reading.read,
+    unread: reading.unread,
     groups: reading.groups.length,
     surfaced: reading.groups.filter(surfaced),
     alarms: alarmsOf(reading.groups),
@@ -73,7 +80,7 @@ export function recordMirrors(root: string, reading: MirrorReading, now: () => D
 export function lastMirrors(root: string): RecordedMirrors | undefined {
   try {
     const parsed = JSON.parse(readFileSync(readingPath(root), "utf8")) as RecordedMirrors;
-    return parsed.version === RECORD_VERSION && typeof parsed.commit === "string" && Array.isArray(parsed.surfaced) && Array.isArray(parsed.alarms) ? parsed : undefined;
+    return parsed.version === RECORD_VERSION && typeof parsed.commit === "string" && Array.isArray(parsed.surfaced) && Array.isArray(parsed.alarms) && typeof parsed.read === "number" && typeof parsed.unread === "object" && parsed.unread !== null ? parsed : undefined;
   } catch {
     return undefined;
   }
@@ -141,6 +148,17 @@ export const ORIENT_LINE_LIMIT = 320;
 /** How many alarms orient names before it counts the rest. */
 const ORIENT_ALARMS = 2;
 
+/**
+ * Whether the kept reading left the project's code unread: it parsed no code
+ * file while some were in another language, or the files it left unread
+ * outnumber the ones it parsed. A TypeScript project with a few stray Python
+ * fixtures is read, and orient says nothing of them (query mirrors still does).
+ */
+export function codeUnread(recorded: RecordedMirrors): boolean {
+  const unread = Object.values(recorded.unread).reduce((sum, n) => sum + n, 0);
+  return unread > 0 && unread > recorded.read;
+}
+
 function cut(line: string): string {
   return line.length <= ORIENT_LINE_LIMIT ? line : `${line.slice(0, ORIENT_LINE_LIMIT - 1)}…`;
 }
@@ -148,13 +166,14 @@ function cut(line: string): string {
 /**
  * Orient's hand-list lines, from the kept reading alone: one line counting
  * the surfaced groups and naming the strongest, and one per alarm (at most
- * two, the rest counted). Nothing when no reading was kept or it surfaces
- * nothing. Advisory, labeled with the commit and time it read.
+ * two, the rest counted), and one when it left the project's code unread.
+ * Nothing when no reading was kept or it surfaces nothing. Advisory, labeled with the commit and time it read.
  */
 export function orientMirrorText(recorded: RecordedMirrors | undefined, cli: string): string {
   if (recorded === undefined) return "";
   const lines: string[] = [];
   const asOf = `the mirror reading at ${recorded.commit.slice(0, 7)}, ${recorded.at.slice(0, 16).replace("T", " ")} UTC`;
+  if (codeUnread(recorded)) lines.push(cut(`Hand lists (${asOf}; advisory): not read for ${unreadText(recorded.unread)}; the reading parses ${PARSED_LANGUAGES}.`));
   const top = recorded.surfaced[0]?.findings[0];
   if (top !== undefined) {
     const n = recorded.surfaced.length;

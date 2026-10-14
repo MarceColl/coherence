@@ -25,8 +25,9 @@
  */
 
 import { execFileSync } from "../../lifecycle/work-meter.ts";
-import { basename, dirname, posix } from "node:path";
+import { basename, dirname, extname, posix } from "node:path";
 import type * as TS from "typescript";
+import { languageOfFile } from "../../adapters/language-files.ts";
 import { DERIVED, DOC_FORMS, type Finding, type Form, type Group, type MirrorHistory, type MirrorReading, type SetRef, type Verdict } from "./model.ts";
 
 export type { Finding, Group, MirrorReading, SetRef, Verdict };
@@ -943,6 +944,9 @@ export async function readMirrors(root: string, options: MirrorOptions = {}): Pr
   const isIgnored = (p: string): boolean => ignored.some((f) => p === f || p.startsWith(`${f}/`) || p.includes(`/${f}/`) && !f.includes("/"));
   const paths = git(root, ["ls-tree", "-r", "-z", "--name-only", commit]).toString("utf8").split("\0").filter((p) => p !== "" && !isIgnored(p));
   const wanted = paths.filter((p) => (CODE_FILE.test(p) && !p.endsWith(".d.ts")) || (DOC_FILE.test(p) && READ_DOC.test(p)));
+  // No silent skip: a file in a language the reading does not parse is counted, so a Python project learns its code went unread.
+  const unread: Record<string, number> = {};
+  for (const p of paths) if (!CODE_FILE.test(p) && languageOfFile(p) !== undefined) unread[extname(p)] = (unread[extname(p)] ?? 0) + 1;
   const texts = readAll(root, commit, wanted);
   phase("read");
 
@@ -985,5 +989,5 @@ export async function readMirrors(root: string, options: MirrorOptions = {}): Pr
       ...(f.history === undefined ? {} : { history: f.history }),
     })),
   }));
-  return { rev, commit, ms: Math.round(performance.now() - t0), phases, sets: ctx.sets.length, groups };
+  return { rev, commit, ms: Math.round(performance.now() - t0), phases, sets: ctx.sets.length, read: wanted.filter((p) => CODE_FILE.test(p)).length, unread, groups };
 }

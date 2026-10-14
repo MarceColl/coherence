@@ -6,10 +6,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { mirrorsCommand } from "./cli.ts";
 import { readMirrors } from "./mirrors.ts";
 import type { Finding, Group, MirrorReading, SetRef } from "./model.ts";
 import { alarmsOf, isAlarm, proposalsOf, readingText, surfaced } from "./policy.ts";
-import { lastMirrors, MIRRORS_DIR, orientMirrorText, recordMirrors } from "./recorded.ts";
+import { lastMirrors, MIRRORS_DIR, ORIENT_LINE_LIMIT, orientMirrorText, recordMirrors } from "./recorded.ts";
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -80,7 +81,7 @@ function finding(a: SetRef, b: SetRef, extra: Partial<Finding> = {}): Finding {
 const group = (rank: number, score: number, findings: Finding[]): Group => ({ rank, score, overlapScore: score, historyScore: 0, findings });
 
 function readingOf(groups: Group[]): MirrorReading {
-  return { rev: "HEAD", commit: "0123456789abcdef0123456789abcdef01234567", ms: 1, phases: {}, sets: 10, groups };
+  return { rev: "HEAD", commit: "0123456789abcdef0123456789abcdef01234567", ms: 1, phases: {}, sets: 10, read: 10, unread: {}, groups };
 }
 
 /* ---------------------------------------------------- the invariants */
@@ -231,4 +232,53 @@ test("latent and duplicate findings of surfaced groups and alarms become propose
   );
   assert.deepEqual(proposed[0]!.members, files);
   assert.equal(proposed[0]!.list.line, 1);
+});
+
+test("files in a language the reading does not parse are counted by extension, said by query mirrors, and named at orient only when they outnumber the code it read", async () => {
+  const root = scratch();
+  try {
+    const git = gitIn(root);
+    git("init", "-q", "-b", "main");
+    write(root, "app/models.py", 'KINDS = ["alpha", "beta", "gamma"]\n');
+    write(root, "app/views.py", "from app.models import KINDS\n");
+    write(root, "app/__init__.py", "");
+    write(root, "app/models.pyi", "KINDS: list[str]\n");
+    write(root, "web/index.ts", "export const one = 1;\n");
+    write(root, "pyproject.toml", '[project]\nname = "app"\n');
+    git("add", "-A");
+    git("commit", "-q", "-m", "a Python project with one TypeScript file");
+    const head = git("rev-parse", "HEAD").trim();
+
+    const reading = await readMirrors(root, { history: false });
+    assert.equal(reading.read, 1, "the one TypeScript file is parsed");
+    assert.deepEqual(reading.unread, { ".py": 3, ".pyi": 1 }, "the Python files are counted by extension, and a file in no language is not");
+
+    let out = "";
+    const io = { out: (text: string): void => { out += text; }, err: (text: string): void => { out += text; } };
+    assert.equal(await mirrorsCommand(root, [], io), 0);
+    assert.match(out, /in \d+ ms; not read: 3 \.py files, 1 \.pyi file \(the reading parses TypeScript, JavaScript and Markdown\)/);
+    out = "";
+    assert.equal(await mirrorsCommand(root, ["--json"], io), 0);
+    assert.deepEqual(JSON.parse(out).unread, { ".py": 3, ".pyi": 1 });
+
+    // query mirrors kept the reading of HEAD; orient names the unread code, labeled with its commit.
+    const kept = lastMirrors(root);
+    assert.ok(kept !== undefined);
+    assert.deepEqual(kept.unread, { ".py": 3, ".pyi": 1 });
+    const text = orientMirrorText(kept, "coherence");
+    assert.match(text, new RegExp(`^Hand lists \\(the mirror reading at ${head.slice(0, 7)}, \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} UTC; advisory\\): not read for 3 \\.py files, 1 \\.pyi file; the reading parses TypeScript, JavaScript and Markdown\\.$`));
+    assert.ok(text.length <= ORIENT_LINE_LIMIT);
+
+    // A project mostly TypeScript with a few stray Python files: orient adds nothing, and query mirrors still says them.
+    const mostlyTypeScript = { ...readingOf([]), read: 10, unread: { ".py": 2 } };
+    assert.equal(orientMirrorText(recordMirrors(root, mostlyTypeScript), "coherence"), "", "a few files unread beside the code read is no line at the session start");
+    assert.match(readingText(mostlyTypeScript), /not read: 2 \.py files/);
+
+    // A reading kept before the counts existed is treated as absent, never a crash.
+    write(root, join(MIRRORS_DIR, "reading.json"), JSON.stringify({ version: 1, commit: head, at: "2026-10-12T09:30:00Z", ms: 1, sets: 0, groups: 0, surfaced: [], alarms: [] }));
+    assert.equal(lastMirrors(root), undefined);
+    assert.equal(orientMirrorText(lastMirrors(root), "coherence"), "");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

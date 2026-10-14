@@ -86,5 +86,9 @@ export interface MirrorReading {
   ms: number;
   phases: Record<string, number>;
   sets: number;
+  /** The code files the reading parsed (TypeScript and JavaScript). */
+  read: number;
+  /** The tracked files in a language the reading does not parse, counted by extension: `{ ".py": 4123 }`. */
+  unread: Record<string, number>;
   groups: Group[];
 }
