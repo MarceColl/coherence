@@ -553,6 +553,9 @@
       "provenance": {
         "owner_words": "the journal exists as COMPRESSION, not just memory. it is compression of possibly millions of subagent session tokens into a handful of durable, comprehensible outcomes. it is a signaling system so that subagents can compare notes. and it is a means of escalation for humans.",
         "defined_by": "owner, 2026-09-17"
+      },
+      "properties": {
+        "shard": "One of a session's files in a record store, <session>.<token>.jsonl, or .jsonseq when packed on one line. A writer starts a new shard whenever HEAD or the branch moves, so a commit seals it and no file is written from two branches."
       }
     },
     {

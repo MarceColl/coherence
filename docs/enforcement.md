@@ -217,7 +217,7 @@ result: ok\\. [1-9]"`); doctests are not run as `via`s.
 
 ## The run and its view
 
-A run appends one line to `.coherence/runs/<session>.jsonl`: time, session,
+A run appends one record to the session's shard, `.coherence/runs/<session>.<token>.jsonl` (docs/records-layout.md): time, session,
 agent, commit, and one entry per enforcement: form, verdict, grade,
 refutation, bypasses, test references, files, latency, reason. The
 refutation field takes one of four values: `automatic` (the check called

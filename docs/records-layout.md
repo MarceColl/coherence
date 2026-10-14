@@ -1,11 +1,125 @@
 # The record stores' layout
 
-A design spike: how the record stores under `.coherence` (the journal, the
-runs, the work orders) can be laid out so that GitHub's merge never conflicts
-on them, and so they barely register in a pull request's line counts. Nothing
-here changes the live stores; the measurements come from
-`bench/records/layouts.ts` and `bench/records/github-counts.ts`, whose output
-is in `bench/records/results.json` and `bench/records/github-counts.json`.
+How the record stores under `.coherence` (the journal, the runs, the work
+orders) are laid out so that GitHub's merge never conflicts on them, and so
+they barely register in a pull request's line counts. The first half is what
+shipped (sealed shards, and readers of packed shards with packed writing off);
+the rest is the design spike behind it (#121), whose measurements come from
+`bench/records/layouts.ts` and `bench/records/github-counts.ts`, with their
+output in `bench/records/results.json` and `bench/records/github-counts.json`.
+
+## As built
+
+**Shards.** Every writer (`appendRecord`, `appendWork`, `appendRun`,
+`appendRefutation`) takes its file from `shardFor` in
+`src/journal/shards.ts` and appends to `.coherence/<store>/<session>.<token>.jsonl`,
+the token 8 random lowercase hex characters. The session is everything before
+the first `.` for every session id with no dot in it (Claude Code's and
+Codex's ids have none; an id with a dot is the name less its last two parts).
+No reader takes attribution from a name: each record's own `session` and
+`agent` stay the attribution, and vetting is unchanged.
+
+**When a shard is sealed.** A writer reuses its last shard in a store only
+while all of these hold, and otherwise starts a new shard with a new token:
+
+- HEAD names the same commit and the same branch (read from `.git`, a
+  worktree's `gitdir:`, the common folder, the loose ref or `packed-refs`;
+  git is asked only in a reftable repository);
+- HEAD's reflog (`logs/HEAD`) is the size it was, so HEAD did not move and
+  come back, as a commit followed by a mixed reset does;
+- the shard is the size the writer left it, and under 2 MiB
+  (`SHARD_LIMIT_BYTES`);
+- the shard has the extension packed writing asks for now;
+- no git command holds `index.lock`, and git's index does not hold the
+  shard, staged or committed.
+
+The index is searched (a byte search of a version 2 or 3 index; `git ls-files`
+for version 4 or a split index) only when its identity moved since the shard
+was last seen outside it, or it was written at or after the shard's last
+write. So most appends pay one stat for it, never a read that grows with the
+project, and a stage or a commit of the shard, which writes the index after the
+shard's last byte, is always searched for.
+
+**The writer's state** is a hint, never what the seal rests on:
+`.coherence/cache/shards/<session>.json`, per checkout, ignored, written aside
+and renamed. Lost, torn or of the wrong shape, it starts a new shard. A state
+that names a committed shard with every other field current (the case
+c-e23e2e42 asked about) is caught by git's own index. Two writers racing on one
+state (the hooks and the warm process) at worst start one shard more than
+needed. The bullets **a committed shard is never appended again** and **lost
+shard state never reuses a committed shard** (Journal) hold this, each with a
+witnessed refutation (d-adcc9c7f).
+
+**Packed shards** are `.coherence/<store>/<session>.<token>.jsonseq`: the file
+starts with U+001E (RFC 7464's record separator), each record is ended by
+U+001E, and it holds no newline, so git and GitHub count it as one line. An
+append is a byte append of the record and its separator, as a line shard's is
+of the record and its newline: append-only holds at the byte level, no record
+is removed or edited, a sealed packed shard is never touched again, a torn
+record is ended by the next separator, and two concurrent writers each append
+whole with no rename to lose one's record to the other's. A temp file and a
+rename on every append was rejected for that reason (d-7f00519e).
+
+Every reader splits a store file on the newline and the separator alike
+(`recordTexts` in `src/journal/stores.ts`) and globs both extensions
+(`isStoreFile`): the journal, `query`, Scope, the work orders, the runs and
+the run index (whose offsets end at the separator in a packed shard), the peer
+feed's stat pass, the citation search (each record of a grep hit), the CI
+records summary, the vocabulary check, and the status line, which now reads
+every one of the session's shards. Ordering by content and the dedupe of a
+record kept twice hold across shards, as they held across session files.
+
+**What 1.7.x does with a packed shard** (`bench/records/old-readers.ts`, run
+against origin/main's 1.7.2 source): its loaders, run index, peer feed stat
+pass and vocabulary check take only `*.jsonl`, so they skip a `.jsonseq`
+shard's records silently and report nothing damaged; its citation search finds
+none of them (a packed line starts with the separator, never with `{"id":`);
+its CI summary counts the shard's bytes and none of its records. It reads every
+line shard whole. So an old reader skips a packed shard rather than reading it
+as damaged, which is why the extension is not `.jsonl`.
+
+**Packed writing ships off** (`PACKED_BY_DEFAULT = false`;
+`COHERENCE_PACKED_RECORDS=1` turns it on for one writer, `0` off), held by the
+bullet **packed writing is off by default** (d-4e3a2564).
+
+### When to write packed shards
+
+In **the release after the one that ships these readers**, the owner decides
+at release time whether to set `PACKED_BY_DEFAULT` to `true` in
+`src/journal/shards.ts`. When it is flipped:
+
+1. change the bullet **packed writing is off by default** in
+   `src/journal/Journal.spec.md` to say packed writing is on, and its test in
+   `src/journal/shards.test.ts`, then refute it again;
+2. say in the release notes that releases before the readers' release skip
+   packed shards' records until they upgrade.
+
+Left off, the line counts stay where they are (2.4% of additions) and nothing
+else changes.
+
+### Measured as built (`bench/records/shipped.ts`, `shipped.json`)
+
+On this repository at 5004785, darwin arm64, node 22.21.1, medians:
+
+| | as built |
+| --- | --- |
+| `loadJournal`, 1x (1,146 records, 89 files) / 10x (11,460, 890 files) | 5.4 ms / 59 ms |
+| `loadRuns`, 1x (1,637 runs) | 68 ms |
+| 1.7.x's append (`appendWhole` to one file) | 0.03 ms |
+| choosing the shard and keeping its state | 0.20 ms (index of 100 files), 0.24 ms (20,000 files, 1.6 MB index) |
+| `appendRecord`, line / packed | 0.24 / 0.24 ms (100 files), 0.28 / 0.29 ms (20,000 files) |
+| `appendRun`, line / packed | 0.47 / 0.46 ms, 0.56 / 0.55 ms |
+| `appendRecord` with the index rewritten before every append (searched each time) | 0.29 ms (100 files), 0.43 ms line / 0.56 ms packed (20,000 files) |
+
+No append spawns git (a spawn is 10 to 18 ms). The hooks' 3 s budget is
+untouched.
+
+**Landing on GitHub's terms.** `node bench/records/shipped.ts --merge <base>
+<head>` lands a branch on its base in a scratch clone with git reading
+attributes from the empty tree, so `merge=union` does not apply, by merge,
+squash and rebase. Its control, two appends to one legacy session file,
+conflicts there and merges clean with the attributes. The pull request that
+shipped this is measured in its description.
 
 ## Recommendation
 
@@ -264,6 +378,10 @@ to, and it is harmless on shards, which never meet in a merge. It keeps
 
 ## Migration
 
+Step 1 below is the release that ships this; the packed format is as **As
+built** describes it (a `.jsonseq` extension, led and ended by U+001E), and
+step 2 is **When to write packed shards**.
+
 Nothing is rewritten at any step. The legacy files stay as they were committed,
 so the history of every record stays where it is.
 
@@ -285,36 +403,43 @@ so the history of every record stays where it is.
    being necessary for records once the release is in use. Pull requests from
    forks merge on GitHub with no local step.
 
-## What changes in the specs
+## What changed in the specs
 
-- **Journal**, the compression line ("one append-only file per session")
-  becomes "append-only files per session, a new one for each commit a checkout
-  writes from". **append-only store** holds per file, and gains a clause with
-  its own refutation: *a committed shard is never appended again; a writer
-  whose HEAD, branch or shard size moved starts a new shard.* Its
-  totality oracle appends, commits, appends, and checks that the committed
-  file's bytes are unchanged. Breaking the reuse rule to ignore HEAD must turn it red.
-- **Lifecycle**, **record stores merge by union** becomes **record stores merge
-  with no driver**. Two checkouts of one session, on parallel and on stacked
-  branches, landed by merge, squash and rebase in a repository with no
-  attributes file, conflict nowhere, and every record of both loads. That is
-  `bench/records/layouts.ts`'s merge matrix as a test, and replacing the seal
-  rule with the branch-only rule must turn it red. The union bullet stays,
-  scoped to the legacy session files.
-- **record readers tolerate what a union merge keeps** stays as it is, and
-  gains the 0x1e separator in release N: a torn packed record is one damaged
-  segment, and the record after it reads whole.
-- **the record stores are named once** is unchanged: the folders are the same,
-  and the shard rule lives in `stores.ts` beside them.
-- **a citation reaches another branch** is unchanged for shards. Release N's
-  citation search splits a grep hit on 0x1e before matching an id.
+- **Journal**: the compression line is now "append-only files per session, a
+  new one for each commit a checkout writes from". **append-only store** holds
+  per file. New bullets, each with a test named by its via line and a
+  witnessed refutation:
+  - **a committed shard is never appended again**, the rotation rule (red
+    when the reuse rule ignores git);
+  - **lost shard state never reuses a committed shard** (red when the index
+    search trusts the kept state alone);
+  - **readers read packed shards** (red when the readers split on the newline
+    alone);
+  - **packed writing is off by default** (red when the default is on).
+- **Lifecycle**: a new **record stores merge with no driver** is the bench's
+  six landings (parallel and stacked, each by merge, squash and rebase, no
+  attributes file) as a test, through the real writers. Replacing the seal
+  rule with the branch-only rule turned it red on stacked plus squash, as the
+  bench predicted. **record stores merge by union** stays, scoped to the
+  legacy `<session>.jsonl` files that releases before this one still append
+  to; its test now appends to them directly (d-451607dd). **record readers
+  tolerate what a union merge keeps** is unchanged, its test also on legacy
+  files.
+- **the record stores are named once** and **a citation reaches another
+  branch** are unchanged; the citation search splits a hit on the separator.
 
 ## Reproducing
 
 ```
 node bench/records/layouts.ts            # about a minute; writes bench/records/results.json
 node bench/records/github-counts.ts --pr 121 --history 30   # needs gh; writes bench/records/github-counts.json
+node bench/records/shipped.ts            # the shards as built, read and appended; writes bench/records/shipped.json
+node bench/records/shipped.ts --merge origin/main HEAD    # a branch landed on GitHub's terms
+node bench/records/old-readers.ts . <an earlier release's src, from git archive>
 ```
+
+The probe files `github-counts.ts --pr 121` reads were added by #121 and are
+not kept here; their counts are in `github-counts.json`.
 
 `layouts.ts` reads this checkout's stores and builds every layout and
 repository in a temporary folder that it removes (`--keep` keeps it). It writes

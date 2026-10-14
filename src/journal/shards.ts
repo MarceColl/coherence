@@ -52,7 +52,7 @@ export const SHARD_LIMIT_BYTES = 2 * 1024 * 1024;
  * this release ships the readers of packed shards; releases before it skip a
  * packed shard's records (stores.ts). Turn it on in the release after the
  * one that ships these readers, at the owner's call (docs/records-layout.md,
- * "Turning packed writing on").
+ * "When to write packed shards").
  */
 export const PACKED_BY_DEFAULT = false;
 
