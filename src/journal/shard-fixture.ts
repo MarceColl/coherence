@@ -7,7 +7,12 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { isPacked, sessionOfStoreFile } from "./stores.ts";
 
-/** The session's store files in `dir`, oldest first (by modification time, then name). */
+/**
+ * The session's store files in `dir`, oldest first: by the time of the first
+ * record each holds, then modification time, then name. A shard rotated in by
+ * a write can share its predecessor's modification time to the millisecond,
+ * and then the random token in its name, alone, would have ordered them.
+ */
 export function sessionFiles(dir: string, session: string): string[] {
   let names: string[];
   try {
@@ -17,9 +22,20 @@ export function sessionFiles(dir: string, session: string): string[] {
   }
   return names
     .filter((name) => sessionOfStoreFile(name) === session)
-    .map((name) => ({ name, at: statSync(join(dir, name)).mtimeMs }))
-    .sort((a, b) => a.at - b.at || (a.name < b.name ? -1 : 1))
+    .map((name) => ({ name, first: firstAt(join(dir, name)), at: statSync(join(dir, name)).mtimeMs }))
+    .sort((a, b) => (a.first < b.first ? -1 : a.first > b.first ? 1 : 0) || a.at - b.at || (a.name < b.name ? -1 : 1))
     .map((f) => f.name);
+}
+
+/** The `at` of a store file's first record, or "" when it has none to read. */
+function firstAt(path: string): string {
+  const first = readFileSync(path, "utf8").split(/[\n\u001e]/).find((t) => t.trim() !== "");
+  try {
+    const at = (JSON.parse(first ?? "") as { at?: unknown }).at;
+    return typeof at === "string" ? at : "";
+  } catch {
+    return "";
+  }
 }
 
 /** The session's one store file in `dir`; throws when it has none or several. */
