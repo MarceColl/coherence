@@ -208,6 +208,13 @@ names the whole set the detector is total over and the test:
   checklist: scoped-reads dismissed: reads are the capability invariant's
 ```
 
+A totality oracle's detector may be quint instead of a test: `via: quint prop
+<property>` names one property of the spec's quint model, which quint
+simulates and model-checks over every state the model reaches (see
+[enforcement.md](enforcement.md#quint-properties)). The spec must name its
+model file on its `model:` line; a quint prop in a spec that names none, or
+one whose property is not an identifier, is a problem.
+
 ### Which references a chokepoint governs
 
 By default a chokepoint governs every reference to the protected thing: any

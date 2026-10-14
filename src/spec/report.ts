@@ -13,7 +13,7 @@ import { defectFloorLines } from "../journal/defects.ts";
 export function verdictText(latest: Latest | undefined): string {
   if (latest === undefined) return "declared, unverified";
   const date = latest.at.slice(0, 10);
-  const grade = latest.grade === undefined ? "" : ` ${latest.grade}`;
+  const grade = latest.grade !== undefined ? ` ${latest.grade}` : latest.quintGrade !== undefined ? ` ${latest.quintGrade}` : "";
   switch (latest.verdict) {
     case "pass":
       return `verified ${date}${grade}`;
@@ -34,7 +34,8 @@ function invariantLines(invariant: ModelInvariant): string[] {
       const from = enforcement.from === undefined || enforcement.from === "anywhere" ? "" : ` from ${fromText(enforcement.from)}`;
       lines.push(`      chokepoint ${enforcement.chokepoint} protects ${enforcement.protects}${from}: ${verdictText(latest)}`);
     } else {
-      lines.push(`      totality oracle "${enforcement.via}" over ${enforcement.over}: ${verdictText(latest)}`);
+      const what = enforcement.quintProp === undefined ? `totality oracle "${enforcement.via}"` : `quint prop ${enforcement.quintProp}`;
+      lines.push(`      ${what} over ${enforcement.over}: ${verdictText(latest)}`);
     }
   }
   if (invariant.crossing !== undefined) lines.push(`      crossing ${invariant.crossing.from} -> ${invariant.crossing.to}`);

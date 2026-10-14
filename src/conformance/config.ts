@@ -3,7 +3,7 @@
  * quint is run) and the `conformance` block (how the code's tests are run
  * under the collector, and how each model's traces are replayed).
  *
- *   "quint": { "backend": "rust", "maxSamples": 2000, "maxSteps": 20, "seed": "0x1", "verify": "apalache", "timeoutSeconds": 600 }
+ *   "quint": { "backend": "rust", "maxSamples": 2000, "maxSteps": 20, "seed": "0x1", "verify": "apalache", "verifySteps": 3, "timeoutSeconds": 600 }
  *   "conformance": {
  *     "buildCommand": "npm run build",
  *     "testCommand": ["node", "--test", "src/journal/journal.test.ts"],
@@ -36,10 +36,12 @@ export interface QuintConfig {
   /** A fixed seed, so a simulation is repeatable; absent, quint picks one and prints it. */
   seed: string | undefined;
   verify: "apalache" | "tlc" | "off";
+  /** The bound the model checker proves within: far fewer steps than a simulation samples, since each step widens the symbolic search. */
+  verifySteps: number;
   timeoutSeconds: number;
 }
 
-export const DEFAULT_QUINT: QuintConfig = { backend: "rust", maxSamples: 2000, maxSteps: 20, seed: undefined, verify: "apalache", timeoutSeconds: 600 };
+export const DEFAULT_QUINT: QuintConfig = { backend: "rust", maxSamples: 2000, maxSteps: 20, seed: undefined, verify: "apalache", verifySteps: 3, timeoutSeconds: 600 };
 
 /** The search bounds for a parameter no logged argument pins: alternatives per missing pick, per step, and per trace. Exceeding one fails the trace. */
 export interface SearchBounds {
@@ -109,6 +111,7 @@ export function readQuintConfig(root: string): QuintConfig {
     maxSteps: numberOr(block["maxSteps"], DEFAULT_QUINT.maxSteps),
     seed,
     verify,
+    verifySteps: numberOr(block["verifySteps"], DEFAULT_QUINT.verifySteps),
     timeoutSeconds: numberOr(block["timeoutSeconds"], DEFAULT_QUINT.timeoutSeconds),
   };
 }

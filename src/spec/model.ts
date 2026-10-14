@@ -483,6 +483,15 @@ export function loadSpecModel(rootGiven: string, options: LoadOptions = {}): Spe
     } else if (model === undefined && config.models) {
       problems.push({ file: specPath, line: 1, message: `no model: line; the config's models key asks every spec to name its quint model or say why not: ${MODEL_LINE_FORM}` });
     }
+    // A quint prop checks a property of the spec's own model, so the spec must name one.
+    if (model?.kind !== "file") {
+      for (const invariant of parsed.invariants) {
+        for (const enforcement of invariant.enforcements) {
+          if (enforcement.form !== "totality oracle" || enforcement.quintProp === undefined) continue;
+          problems.push({ file: specPath, line: enforcement.line, message: `${invariant.name}: a quint prop checks a property of the spec's quint model, and this spec names none; add model: <file>.qnt` });
+        }
+      }
+    }
     const paired = practiceFiles.get(folder);
     const practices = (paired?.parsed.practices ?? []).map((practice) => modelPractice(practice, `${folder}/${practice.name}`, folder, paired!.file, enactments));
     components.push({

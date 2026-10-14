@@ -317,3 +317,10 @@ model: planned — refutation witnessing (recorded, then witnessed by a later pa
   because: a name that matched no bullet was dropped without a word, so a run of nine names whose fifth was mistyped ran eight, reported them passing and exited 0, and a refutation confirmed through it would read as witnessed for a bullet it never ran (df-5c88f106)
   refuted: let run go on without the names that match no bullet, as before -> "run refuses an --invariant that names no bullet, running nothing, and takes a bullet by its component folder and name too" went red in each.test.ts; restored (cmp), green batched and alone (2026-10-12)
   kinds: none
+- a quint prop passes only when every quint step answered: A via: quint prop <property> is checked by quint typecheck, quint run and quint verify against the spec's quint model, never run as a test title; it passes only when every step answered ok, grades simulated only when the config turns verify off, a step that could not start or did not finish leaves it not run, and a violation or a refusal fails it.
+  over: every quint prop the run checks, under each outcome a quint step can give: ok, a violation, a refusal, quint absent, a model checker with no Java, and verify off
+  via: a quint prop passes only when every quint step answered: verify unavailable or quint absent is not run, a violation or a refusal fails, and only verify off grades simulated
+  because: a property checked by a tool that never ran reads as proved; quint verify needs Java and Apalache, which a machine may lack, and simulation samples where the model checker proves, so a missing step must say so and the weaker grade must be chosen in the config, never fallen into
+  crossing: instrument -> record
+  refuted: made settle in quint-prop.ts read an unavailable quint step as ok -> "a quint prop passes only when every quint step answered" went red in src/enforcement/quint-prop.test.ts; restored (cmp), green batched and alone (2026-10-14)
+  kinds: none

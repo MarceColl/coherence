@@ -608,3 +608,17 @@ test("a spec names its quint model or says why not: a .qnt file, or none or plan
     assert.match(formatReport(model), /^COVERAGE {2}src\/door\/Door\.spec\.md:1 {2}names no model/m);
   });
 });
+
+test("a via: quint prop names one property of the spec's model, needs the spec to name a model file, and is no test title", () => {
+  const bullet = (via: string): string => `- ended: An ended order never moves.\n  over: every reachable state\n  via: ${via}\n  kinds: none\n`;
+  const spec = (model: string, via: string): string => `# Journal\n\nWork orders.\n${model}\n\n## invariants\n${bullet(via)}`;
+  const parsed = parseSpec(spec("model: Journal.qnt", "quint prop terminalNeverMoves"), "X.spec.md", { seed });
+  assert.deepEqual(parsed.problems, []);
+  assert.deepEqual(parsed.invariants[0]?.enforcements, [{ form: "totality oracle", over: "every reachable state", via: "quint prop terminalNeverMoves", line: 8, quintProp: "terminalNeverMoves" }]);
+  assert.equal((parseSpec(spec("", "the quint props are listed"), "X.spec.md", { seed }).invariants[0]?.enforcements[0] as { quintProp?: string }).quintProp, undefined, "a test title that merely mentions quint is a test title");
+  assert.match(parseSpec(spec("model: Journal.qnt", "quint prop two words"), "X.spec.md", { seed }).problems[0]?.message ?? "", /names one property of the spec's quint model, an identifier/);
+  withModel({ "Journal.spec.md": spec("model: none — no state", "quint prop terminalNeverMoves") }, (model) => {
+    assert.match(model.problems.map((p) => p.message).join("\n"), /a quint prop checks a property of the spec's quint model, and this spec names none/);
+  });
+  withModel({ "Journal.spec.md": spec("model: Journal.qnt", "quint prop terminalNeverMoves"), "Journal.qnt": "module Journal {}\n" }, (model) => assert.deepEqual(model.problems, []));
+});

@@ -262,3 +262,10 @@ model: Journal.qnt
   because: the catches were written out in the record model, telemetry, the help twice, the docs twice, this spec and the lexicon; the step results in the union, the verb's own list, its template and refusals, the help, the docs and Scope's model; the work states work move takes in its help and refusal; and the id prefixes in a regular expression of their own, so a value added to one place would be refused, unsent, undocumented or never cited, and nothing would fail
   refuted: wrote the states work move takes out by hand again in its help, the literal open|active|waiting|cancelled in place of MOVE_STATES -> "every closed list the journal verbs take is read from the record model, and every help line, doc and definition that enumerates one names exactly its members" went red in vocabularies.test.ts on its own assertion; restored (cmp), green batched and alone (2026-10-12)
   kinds: none
+- an ended order never moves: A completed or cancelled work order stays in the state it ended in: no move, close or owner change reaches it.
+  over: every state the work-order model reaches from an empty journal
+  via: quint prop terminalNeverMoves
+  because: an ended order that moved again would reopen work its owner closed and rebind runs to it; the verbs refuse it one by one, and the model states it once over every sequence of verbs
+  crossing: project-source -> record
+  refuted: dropped the isLive guard from move in Journal.qnt -> quint run found a state that breaks terminalNeverMoves; restored from HEAD, verified again (2026-10-14)
+  kinds: none

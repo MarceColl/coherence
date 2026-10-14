@@ -128,6 +128,16 @@ export interface RunEntry {
   from?: Governed;
   /** Totality oracle form only: whether the test ran in the one batched invocation or in its own. */
   mode?: "batched" | "one-at-a-time";
+  /** A quint prop only: the property of the spec's quint model its via: names; the detector was quint, never a test. */
+  quintProp?: string;
+  /** A quint prop that passed: verified when the model checker proved it within its bound, simulated when the config accepts simulation alone. */
+  quintGrade?: "verified" | "simulated";
+  /** A quint prop only: what each quint step answered, with its milliseconds; skipped when an earlier step settled the verdict or the config turned the step off. */
+  quintSteps?: Partial<Record<"typecheck" | "simulate" | "verify", { outcome: string; ms: number }>>;
+  /** A quint prop only: the model's latest conformance verdict, as the prop read it: whether the model still describes the code. */
+  conformance?: "agrees" | "disagrees" | "stale" | "absent";
+  /** A quint prop that failed: the states quint printed that break the property, truncated. */
+  counterexample?: string;
   refutation: RefutationState;
   bypasses: Bypass[];
   /**

@@ -25,7 +25,7 @@
  *     chokepoint: <symbol>
  *     from: anywhere | outside the component | outside <folder>   optional; which references the chokepoint governs
  *     over: <the set the detector is total over>   totality oracle form, with
- *     via: <the test>
+ *     via: <the test> | quint prop <property>      a test's title, or a property of the spec's quint model
  *     because: <why it exists, what it protects against>
  *     crossing: <trust level> -> <trust level>
  *     entrances: <entrance, entrance> | none   optional; the entrances whose work it checks, by name, never by crossing alone
@@ -171,7 +171,17 @@ export function fromText(from: ChokepointFrom): string {
 
 export type Enforcement =
   | { form: "chokepoint"; protects: string; chokepoint: string; line: number; from?: ChokepointFrom }
-  | { form: "totality oracle"; over: string; via: string; line: number };
+  | {
+      form: "totality oracle";
+      over: string;
+      via: string;
+      line: number;
+      /** Set when the via: reads quint prop <property>: the detector is quint, checking that property of the spec's model, never a test. */
+      quintProp?: string;
+    };
+
+/** A via: that names a property of the spec's quint model rather than a test: quint prop <property>. */
+export const QUINT_PROP = /^quint\s+prop\b\s*(.*)$/;
 
 export interface Refutation {
   broke: string;
@@ -648,7 +658,19 @@ function buildInvariant(bullet: RawBullet, problem: (line: number, message: stri
     if (x !== undefined && y !== undefined) enforcements.push(make(x, y, fa.line));
   };
   pair("protects", "chokepoint", (protects, chokepoint, line) => ({ form: "chokepoint", protects, chokepoint, line }), "the chokepoint form");
-  pair("over", "via", (over, via, line) => ({ form: "totality oracle", over, via, line }), "the totality oracle form");
+  pair(
+    "over",
+    "via",
+    (over, via, line) => {
+      // A quint prop names one property of the spec's model, an identifier; anything else after quint prop is refused, never run as a test title.
+      const prop = QUINT_PROP.exec(via);
+      if (prop === null) return { form: "totality oracle", over, via, line };
+      const property = prop[1]!.trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(property)) problem(single.get("via")!.line, `via: quint prop on ${bullet.name} names one property of the spec's quint model, an identifier; "${property}" is not one`);
+      return { form: "totality oracle", over, via, line, quintProp: property };
+    },
+    "the totality oracle form",
+  );
 
   // Which references the chokepoint governs: a from: line belongs to the chokepoint form and nothing else.
   const fromField = single.get("from");

@@ -260,4 +260,5 @@ model: none — deriveState is a pure classifier of a bullet and its latest run,
   via: a spec names its quint model or says why not: a .qnt file, or none or planned with its reason; a missing line is a problem only where the config requires it
   because: a spec with no model and no reason leaves "a model makes no sense here" and "nobody wrote one" indistinguishable; the line makes the choice explicit and checkable, and a project that never opted in is never failed for a line it was never asked for
   crossing: project-source -> reading
+  refuted: made the model: line's none and planned accept an empty reason in parseSpec -> "a spec names its quint model or says why not" went red in src/spec/spec.test.ts on its own assertion; restored (cmp), green batched and alone (2026-10-14)
   kinds: none

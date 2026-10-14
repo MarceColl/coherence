@@ -156,9 +156,9 @@ export function simulate(file: string, invariant: string, quint: QuintConfig, op
   return runQuint(argv, options);
 }
 
-/** Model-check an invariant within the configured steps, with the configured checker. */
+/** Model-check an invariant within the configured verify bound, with the configured checker. */
 export function verify(file: string, invariant: string, quint: QuintConfig, options: QuintRunOptions & { main?: string }): Promise<QuintResult> {
-  const argv = ["verify", ...target(file, options.main), "--invariant", invariant, "--max-steps", String(quint.maxSteps)];
+  const argv = ["verify", ...target(file, options.main), "--invariant", invariant, "--max-steps", String(quint.verifySteps)];
   if (quint.verify === "tlc") argv.push("--backend", "tlc");
   return runQuint(argv, options);
 }
