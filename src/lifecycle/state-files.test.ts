@@ -8,6 +8,7 @@ import { appendRun, loadRuns, type RunRecord } from "../enforcement/record.ts";
 import { appendRecord, loadJournal } from "../journal/store.ts";
 import { appendWork, loadWork } from "../journal/work.ts";
 import type { Decision, WorkOrderRecord } from "../journal/record.ts";
+import { appendVerdict, loadVerdicts, type ConformanceVerdict } from "../conformance/store.ts";
 import { RECORD_STORES } from "./project.ts";
 import { ATTRIBUTES_FILE, ATTRIBUTES_TEXT, ATTRIBUTE_LINES, EARLIER_IGNORE_TEXTS, IGNORE_FILE, IGNORE_TEXT, keepAttributes, keepIgnore, keepStateFiles } from "./state-files.ts";
 
@@ -57,10 +58,15 @@ function run(at: string, name: string): RunRecord {
 }
 
 /** One record in every record store, all under the one session, as a branch's work appends them. */
+function verdict(n: string, at: string): ConformanceVerdict {
+  return { at, session: SESSION, agent: "tester", commit: null, dirty: false, model: `model ${n}`, file: "M.qnt", captureHash: n, replayHash: n, verdict: "agrees", matched: 1, total: 1, pinned: 1, logged: 1, unpinned: [], failures: [], unreached: [], gaps: [] };
+}
+
 function appendAll(root: string, n: string, at: string): void {
   appendRecord(root, decision(n, at));
   appendWork(root, order(n, at));
   appendRun(root, run(at, `invariant ${n}`));
+  appendVerdict(root, verdict(n, at));
 }
 
 /**
@@ -98,11 +104,12 @@ function assertAllLoad(root: string, how: string): void {
   const runs = loadRuns(root);
   assert.deepEqual(runs.damaged, [], `${how}: the runs read whole`);
   assert.deepEqual(runs.records.map((r) => r.invariants[0]!.name), ["1", "2", "3", "4"].map((n) => `invariant ${n}`), `${how}: every run of both branches loads`);
+  assert.deepEqual(loadVerdicts(root).map((v) => v.model), ["1", "2", "3", "4"].map((n) => `model ${n}`), `${how}: every conformance verdict of both branches loads`);
 }
 
 test("two branches that append different records to one session's file in every record store merge and rebase with no conflict, and every record of both loads", () => {
   // Every store the attributes name is one the stack writes, and every store it writes is named.
-  assert.deepEqual([...RECORD_STORES].sort(), ["journal", "runs", "work"]);
+  assert.deepEqual([...RECORD_STORES].sort(), ["conformance", "journal", "runs", "work"]);
   const merged = stack(true);
   const merge = git(merged, "merge", "-q", "--no-edit", "lower");
   assert.equal(merge.status, 0, `the merge conflicts: ${merge.out}`);

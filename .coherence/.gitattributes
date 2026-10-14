@@ -9,3 +9,5 @@ runs/*.jsonl merge=union
 runs/** linguist-generated=true
 work/*.jsonl merge=union
 work/** linguist-generated=true
+conformance/*.jsonl merge=union
+conformance/** linguist-generated=true

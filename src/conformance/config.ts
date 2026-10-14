@@ -8,6 +8,8 @@
  *     "buildCommand": "npm run build",
  *     "testCommand": ["node", "--test", "src/journal/journal.test.ts"],
  *     "cwd": ".",
+ *     "client": "test/coherence",
+ *     "timeoutSeconds": 1800,
  *     "required": false,
  *     "models": {
  *       "src/journal": {
@@ -20,13 +22,15 @@
  *   }
  *
  * The keys split by which side they touch: buildCommand, testCommand, cwd and
- * scopes decide what the code emits (capture-side), and names, search and
- * acknowledged decide only how it is replayed (replay-side). The split is what
- * the capture and replay hashes are taken over, so a replay-side change
- * replays the stored traces and never runs the tests again.
+ * client decide what the code emits (capture-side), and scopes, names, search
+ * and acknowledged decide only how the stored traces are read and replayed
+ * (replay-side: a capture keeps every scope's events, and a model filters its
+ * own). The split is what the capture and replay hashes are taken over, so a
+ * replay-side change replays the stored traces and never runs the tests again.
  */
 
 import { configRecord } from "../adapters/project-config.ts";
+import { DEFAULT_VENDOR_DIR } from "./vendor.ts";
 
 /** How quint runs: the evaluator backend, the simulation bounds, and which model checker proves a property, or off to accept simulation alone. */
 export interface QuintConfig {
@@ -75,6 +79,10 @@ export interface ConformanceConfig {
   testCommand: string | string[] | undefined;
   /** The folder the build and the tests run from, relative to the config's folder. */
   cwd: string;
+  /** The folder holding the vendored client and its node:test hooks, relative to the root; the hooks are loaded into the test command from there. */
+  client: string;
+  /** How long the build and the test command may each run before their process tree is killed. */
+  timeoutSeconds: number;
   /** Whether a quint prop needs its model's latest conformance verdict to agree and be current. */
   required: boolean;
   models: ModelConformance[];
@@ -148,6 +156,8 @@ export function readConformanceConfig(root: string): ConformanceConfig {
     buildCommand: commandOf(block["buildCommand"]),
     testCommand: commandOf(block["testCommand"]),
     cwd: typeof block["cwd"] === "string" && block["cwd"] !== "" ? block["cwd"] : ".",
+    client: typeof block["client"] === "string" && block["client"] !== "" ? block["client"].replace(/\/+$/, "") : DEFAULT_VENDOR_DIR,
+    timeoutSeconds: numberOr(block["timeoutSeconds"], 1800),
     required: block["required"] === true,
     models,
   };

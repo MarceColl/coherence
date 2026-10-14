@@ -324,3 +324,10 @@ model: planned — refutation witnessing (recorded, then witnessed by a later pa
   crossing: instrument -> record
   refuted: made settle in quint-prop.ts read an unavailable quint step as ok -> "a quint prop passes only when every quint step answered" went red in src/enforcement/quint-prop.test.ts; restored (cmp), green batched and alone (2026-10-14)
   kinds: none
+- a quint prop needs a current, agreeing conformance verdict: With conformance.required in the config, a quint prop passes only when its model's conformance verdict for the code and the model as they are now agrees; one that disagrees fails it, and a stale or absent one leaves it not run.
+  over: every quint prop under conformance.required, with its model's standing agreeing, disagreeing, stale and absent, and without the requirement
+  via: with conformance required, a quint prop needs its model's latest conformance verdict to agree and be current
+  because: a property proved of a model says nothing of the code until conformance replay has held the model against it; a model nobody checked against the code could pass every property and describe nothing that runs
+  crossing: instrument -> record
+  refuted: made a quint prop ignore conformance.required -> "with conformance required, a quint prop needs its model's latest conformance verdict to agree and be current" went red in src/enforcement/quint-prop.test.ts; restored (cmp), green batched and alone (2026-10-14)
+  kinds: none

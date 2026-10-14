@@ -23,6 +23,8 @@ export const STORES = {
   runs: { folder: "runs", prose: false },
   /** Work orders and their moves. */
   work: { folder: "work", prose: true },
+  /** Conformance verdicts: each model held against the code's own tests, machine-written. */
+  conformance: { folder: "conformance", prose: false },
 } as const;
 
 export type RecordStore = keyof typeof STORES;

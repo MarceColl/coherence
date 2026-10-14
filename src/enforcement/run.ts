@@ -32,6 +32,7 @@ import { escapeRegExp, runTotalityBatch, runTotalityOracle, type TotalityResult 
 import { readLatency, type LatencyReading } from "./latency.ts";
 import { createObserver, recordObservation, type ObservationOutcome, type TotalityVia } from "../observation/index.ts";
 import { checkQuintProp, type StandingOf } from "./quint-prop.ts";
+import { conformanceStanding } from "../conformance/standing.ts";
 
 export interface RunOptions {
   session: string;
@@ -71,7 +72,7 @@ export interface RunOptions {
   each?: boolean | undefined;
   /** Only quint props: the totality oracles whose detector is quint, never a test and never a chokepoint. */
   quint?: boolean | undefined;
-  /** How a quint prop learns its model's conformance verdict; without it, each reads absent. */
+  /** How a quint prop learns its model's conformance verdict; by default, from the conformance store. */
   standing?: StandingOf | undefined;
 }
 
@@ -472,7 +473,7 @@ export async function performRun(root: string, options: RunOptions): Promise<Run
         const t0 = Date.now();
         if (quintProp !== undefined) {
           const modelFile = model.components.find((c) => c.folder === component)?.model?.path;
-          const result = await checkQuintProp(root, component, modelFile, quintProp, options.standing);
+          const result = await checkQuintProp(root, component, modelFile, quintProp, options.standing ?? conformanceStanding);
           details.push({
             entry: {
               ...entryOf(component, invariant.name, "totality oracle", {

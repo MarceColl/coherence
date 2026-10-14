@@ -39,18 +39,33 @@ export const ATTRIBUTES_FILE = join(STATE_DIR, ".gitattributes");
 export const IGNORE_TEXT = [
   "# Written by coherence hooks install; hooks uninstall removes it.",
   "# Commit this file, .gitattributes and the folders it keeps: the journal,",
-  "# runs and work orders are durable records, and hooks holds the project's",
-  "# own hook voice. Everything else here is regenerated (feed cursors, read",
-  "# traces, practice firings, the warm server, structure and lexicon",
-  "# readings), so git ignores it.",
+  "# runs, work orders and conformance verdicts are durable records, and hooks",
+  "# holds the project's own hook voice. Everything else here is regenerated",
+  "# (feed cursors, read traces, practice firings, the warm server, structure",
+  "# and lexicon readings, conformance captures), so git ignores it.",
   "/*",
   "!/.gitignore",
   "!/.gitattributes",
   ...DURABLE_FOLDERS.map((folder) => `!/${folder}/`),
 ].join("\n") + "\n";
 
-/** What releases through 1.6.0 wrote, which ignored the attributes file; a file holding exactly one of these is brought up to IGNORE_TEXT. */
+/** What earlier releases wrote: 1.7.2's, before the conformance store, and through 1.6.0's, which ignored the attributes file; a file holding exactly one of these is brought up to IGNORE_TEXT. */
 export const EARLIER_IGNORE_TEXTS: readonly string[] = [
+  [
+    "# Written by coherence hooks install; hooks uninstall removes it.",
+    "# Commit this file, .gitattributes and the folders it keeps: the journal,",
+    "# runs and work orders are durable records, and hooks holds the project's",
+    "# own hook voice. Everything else here is regenerated (feed cursors, read",
+    "# traces, practice firings, the warm server, structure and lexicon",
+    "# readings), so git ignores it.",
+    "/*",
+    "!/.gitignore",
+    "!/.gitattributes",
+    "!/journal/",
+    "!/runs/",
+    "!/work/",
+    "!/hooks/",
+  ].join("\n") + "\n",
   [
     "# Written by coherence hooks install; hooks uninstall removes it.",
     "# Commit this file and the folders it keeps: the journal, runs and work",
