@@ -58,7 +58,7 @@ import { singular } from "./inflection.ts";
 import { LOCKFILES } from "./lockfiles.ts";
 import { configIgnore, exclusionOf, projectFiles, underIgnored, walkBounds, type Bounds } from "../adapters/project-files.ts";
 import { CONFIG_FILE, isCoherenceItself, vocabularyFacts } from "./project.ts";
-import { PROSE_STORE_FOLDERS } from "../journal/stores.ts";
+import { PROSE_STORE_FOLDERS, isStoreFile, recordTexts } from "../journal/stores.ts";
 import { recordWords } from "../journal/record.ts";
 import { isWellKnown, wellKnown, type WellKnown } from "./well-known.ts";
 import { proseNominations } from "./nomination.ts";
@@ -199,10 +199,15 @@ function machineWritten(rel: string): boolean {
   return parts[0] === COHERENCE_DIR && parts.length >= 2 && !RECORD_FOLDERS.includes(parts[1]!);
 }
 
-/** A journal or work record file: one JSONL line per record, under .coherence. */
+/** A file's lines as the check numbers them; a record file's are its records, a packed shard's split on the record separator. */
+function linesOf(text: string, kind: FileKind): string[] {
+  return kind === "record" ? recordTexts(text).map((line) => line.replace(/\r$/, "")) : text.split(/\r?\n/);
+}
+
+/** A journal or work record file: one record per line, or per segment in a packed shard, under .coherence. */
 function isRecordFile(rel: string): boolean {
   const parts = rel.split("/");
-  return parts.length >= 3 && parts[0] === COHERENCE_DIR && RECORD_FOLDERS.includes(parts[1]!) && parts[parts.length - 1]!.endsWith(".jsonl");
+  return parts.length >= 3 && parts[0] === COHERENCE_DIR && RECORD_FOLDERS.includes(parts[1]!) && isStoreFile(parts[parts.length - 1]!);
 }
 
 /**
@@ -356,7 +361,7 @@ export async function readCorpus(options: CheckOptions, only?: (rel: string, lis
       continue;
     }
     if (isBinary(text)) { excluded.push({ file: relPath(root, path), reason: "binary content" }); continue; }
-    out.push({ path, rel: relPath(root, path), kind: kindOf(root, path)!, lines: text.split(/\r?\n/) });
+    out.push({ path, rel: relPath(root, path), kind: kindOf(root, path)!, lines: linesOf(text, kindOf(root, path)!) });
   }
   return { files: out, listed, unreadable, excluded };
 }
@@ -391,7 +396,7 @@ export async function corpusFiles(options: CheckOptions, rels: readonly string[]
       continue;
     }
     if (isBinary(text)) continue;
-    out.push({ path, rel, kind, lines: text.split(/\r?\n/) });
+    out.push({ path, rel, kind, lines: linesOf(text, kind) });
   }
   return out;
 }

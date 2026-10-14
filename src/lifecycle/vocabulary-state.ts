@@ -35,7 +35,7 @@ import { digest, lexiconReading, singularForms, type Contribution, type Coverage
 import type { Lexicon } from "./lexicon.ts";
 import { vocabularyFacts } from "./project.ts";
 import { journalFileKeys } from "../journal/store.ts";
-import { storeDir } from "../journal/stores.ts";
+import { isStoreFile, storeDir } from "../journal/stores.ts";
 
 const SHAPE = "vocabulary-1";
 /** Buckets per kind: an edit reads at most this many term buckets, whatever the project's size. */
@@ -348,7 +348,7 @@ function recordKeys(root: string): Record<string, string> | undefined {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") return undefined;
       names = [];
     }
-    for (const name of names.filter((n) => n.endsWith(".jsonl")).sort()) {
+    for (const name of names.filter(isStoreFile).sort()) {
       const stat = statSync(join(dir, name));
       out[`work/${name}`] = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`;
     }

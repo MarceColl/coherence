@@ -6,14 +6,14 @@
  * The host runs a status line command after events, debounced, and cancels
  * one still running when the next is due, so this reads only what the hooks
  * already kept for the session: its hook times, its firings and its journal
- * file, in the project the status line runs in, in the repository top and in
+ * shards, in the project the status line runs in, in the repository top and in
  * each leaf a registry there lists. No git, no spec model, no project
  * listing: the cost is the session's own files, whatever the project's size.
  * It imports nothing of Coherence's beyond this file, because loading the
  * modules the hooks load would cost more than every reading here together.
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -60,7 +60,7 @@ function lines(path: string): unknown[] {
   } catch {
     return [];
   }
-  return text.split("\n").flatMap((line) => {
+  return text.split(/[\n\u001e]/).flatMap((line) => {
     if (line.trim() === "") return [];
     try {
       return [JSON.parse(line) as unknown];
@@ -68,6 +68,24 @@ function lines(path: string): unknown[] {
       return [];
     }
   });
+}
+
+/**
+ * The session's own journal records: its legacy `<session>.jsonl` and every
+ * shard `<session>.<token>.jsonl` or packed `.jsonseq` (journal/stores.ts),
+ * whose records end with U+001E instead of a newline. One listing of the
+ * folder, then the session's files alone.
+ */
+function journalOf(dir: string, session: string): unknown[] {
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const legacy = fileName(session);
+  const shard = new RegExp(`^${session.replace(/[^\w-]/g, (c) => `\\${c}`)}\\.[0-9a-f]{8}\\.(jsonl|jsonseq)$`);
+  return names.filter((n) => n === legacy || shard.test(n)).flatMap((n) => lines(join(dir, n)));
 }
 
 function config(dir: string): Record<string, unknown> | undefined {
@@ -186,7 +204,7 @@ export function readStatus(input: StatusInput): StatusReading | undefined {
       const firing = f as { practice?: unknown; at?: unknown };
       if (typeof firing.practice === "string" && typeof firing.at === "string" && !fired.has(firing.practice)) fired.set(firing.practice, firing.at);
     }
-    for (const r of lines(join(dir, STATUS_SOURCES.journal, name))) {
+    for (const r of journalOf(join(dir, STATUS_SOURCES.journal), session)) {
       const record = r as { kind?: unknown; practice?: unknown; at?: unknown; session?: unknown };
       if (record.kind === "enactment" && typeof record.practice === "string" && typeof record.at === "string" && record.session === session) enacted.push({ practice: record.practice, at: record.at });
     }

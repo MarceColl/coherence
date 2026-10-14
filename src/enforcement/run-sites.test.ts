@@ -8,11 +8,12 @@
 import assert from "node:assert/strict";
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { appendRun, entryKey, latestByEnforcement, loadRuns, parseLine, sitesHash, type RecordedSite, type RunRecord } from "./record.ts";
 import { latestSeeing } from "./run-index.ts";
+import { onlyFile, sessionFiles, sessionText } from "../journal/shard-fixture.ts";
 import { countingFs } from "../lifecycle/fs-count-fixture.ts";
 
 const site = (file: string, line: number): RecordedSite => ({ file, line, symbol: "seal", class: "inside", of: "protected", test: false });
@@ -32,7 +33,7 @@ function run(at: string, sites: RecordedSite[] | undefined, session = "sites"): 
 }
 
 function written(root: string, session = "sites"): Record<string, unknown>[] {
-  return readFileSync(join(root, ".coherence", "runs", `${session}.jsonl`), "utf8").trim().split("\n").map((l) => (JSON.parse(l) as { invariants: Record<string, unknown>[] }).invariants[0]!);
+  return sessionText(join(root, ".coherence", "runs"), session).trim().split("\n").map((l) => (JSON.parse(l) as { invariants: Record<string, unknown>[] }).invariants[0]!);
 }
 
 /** Every run file's raw lines, by name. */
@@ -68,7 +69,7 @@ test("a run whose sites did not change stores a reference within its own run fil
     assert.deepEqual(written(root, "other")[0]!["sites"], changed, "a file's first entry for an enforcement is in full");
     assert.deepEqual(written(root, "other")[1]!["sitesRef"], { hash: sitesHash(changed), at: "2026-05-05T00:00:00.000Z" }, "and a reference stays in its file");
     // Each run file resolves alone: take away any one, and every entry of the others still has its sites.
-    for (const gone of ["sites.jsonl", "other.jsonl"]) {
+    for (const gone of ["sites", "other"].map((s) => basename(onlyFile(join(root, ".coherence", "runs"), s)))) {
       const alone = mkdtempSync(join(tmpdir(), "coherence-sites-alone-"));
       try {
         cpSync(join(root, ".coherence"), join(alone, ".coherence"), { recursive: true });
@@ -124,7 +125,7 @@ test("over this repository's run store, a run written with its unchanged sites b
       return JSON.stringify({ loaded, latest: [...latestByEnforcement(loaded.records)] });
     };
     assert.equal(views(reference), views(full), "every view the run store feeds is byte-identical");
-    const bytes = (root: string): number => statSync(join(root, ".coherence", "runs", "sites-reference-test.jsonl")).size;
+    const bytes = (root: string): number => statSync(onlyFile(join(root, ".coherence", "runs"), "sites-reference-test")).size;
     assert.ok(bytes(reference) < bytes(full), `the reference run is smaller: ${bytes(reference)} bytes against ${bytes(full)}`);
   } finally {
     for (const root of roots) rmSync(root, { recursive: true, force: true });
@@ -153,10 +154,10 @@ test("an append asks its run file's sites shard, never the file: beside ten time
       const lines = written(root, "long");
       assert.equal(lines.at(-1)!["sites"], undefined, "the unchanged sites are not written again");
       assert.deepEqual(lines.at(-1)!["sitesRef"], { hash: sitesHash(lastSites), at: loadRuns(root).records.at(-2)!.at }, "but referred to, from the shard");
-      const session = Object.entries(fs.paths).filter(([key]) => /^(readFileSync|readSync|promises\.readFile|readFile) .*\/runs\/long\.jsonl$/.test(key));
+      const session = Object.entries(fs.paths).filter(([key]) => /^(readFileSync|readSync|promises\.readFile|readFile) .*\/runs\/long\.[0-9a-f]{8}\.jsonl$/.test(key));
       // The index's fold reads the appended line back, and only it: its bytes are the line's, at any length of the file,
       // and the one last byte the append reads first to see whether a torn line needs ending (append.ts).
-      const appended = Buffer.byteLength(readFileSync(join(root, ".coherence", "runs", "long.jsonl"), "utf8").trim().split("\n").at(-1)! + "\n") + 1;
+      const appended = Buffer.byteLength(readFileSync(onlyFile(join(root, ".coherence", "runs"), "long"), "utf8").trim().split("\n").at(-1)! + "\n") + 1;
       assert.deepEqual(session.map(([, bytes]) => bytes), session.length === 0 ? [] : [appended], "the session's run file is read for the appended line alone");
       counted.push(fs.calls);
     }
@@ -172,7 +173,7 @@ test("an append asks its run file's sites shard, never the file: beside ten time
     assert.deepEqual(written(root, "long").at(-1)!["sites"], lastSites, "with no shard, the sites are written in full");
     appendRun(root, run("2026-06-03T00:00:00.000Z", lastSites, "long"));
     assert.ok(written(root, "long").at(-1)!["sitesRef"] !== undefined, "and the shard starts again from that line");
-    appendFileSync(join(root, ".coherence", "runs", "long.jsonl"), JSON.stringify(run("2026-06-04T00:00:00.000Z", undefined, "long")) + "\n");
+    appendFileSync(sessionFiles(join(root, ".coherence", "runs"), "long").map((n) => join(root, ".coherence", "runs", n)).at(-1)!, JSON.stringify(run("2026-06-04T00:00:00.000Z", undefined, "long")) + "\n");
     appendRun(root, run("2026-06-05T00:00:00.000Z", lastSites, "long"));
     assert.deepEqual(written(root, "long").at(-1)!["sites"], lastSites, "a file the shard was not kept for is written in full");
     assert.deepEqual(loadRuns(root).damaged, [], "and every reference written resolves");

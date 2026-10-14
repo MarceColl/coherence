@@ -103,7 +103,7 @@ nothing; its value is that a reader sees everything one assignment produced.
 - `work inspect [<id>]`: one order with its history, what its records cite, the journal records bound to it, the records citing it or its moves, and the runs bound to it; or every order.
 
 A completed or cancelled order accepts no further write. Records live in
-`.coherence/work/<session>.jsonl`, append only, with the journal's head.
+`.coherence/work/<session>.<token>.jsonl`, append only, with the journal's head.
 
 **Binding is inferred.** A write by a session that owns exactly one active
 order binds to it: the record carries `work` and `binding: inferred`.
@@ -150,8 +150,11 @@ its file and line number and skipped; the damaged count prints last.
 
 ## Record shape
 
-One JSONL file per session at `.coherence/journal/<session>.jsonl`, append
-only. Every record carries `id`, `kind`, `at` (ISO), `session`, `agent`,
+Sealed shards per session at `.coherence/journal/<session>.<token>.jsonl`,
+one record per line, a new shard whenever HEAD or the branch moves; a packed
+shard, `.jsonseq`, holds its records on one line, each ended by U+001E
+(docs/records-layout.md). A legacy `<session>.jsonl` is read as committed.
+Append only. Every record carries `id`, `kind`, `at` (ISO), `session`, `agent`,
 `commit` (short sha or null), `dirty`, its binding, and its kind's fields;
 `cites` (a list of ids) when it cites any, and `human` when the agent recorded
 a human's words. A defect may carry `class`, `introduced` and `caught`; a

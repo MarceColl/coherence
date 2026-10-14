@@ -4,9 +4,11 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realp
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { appendRun, loadRuns, type RunRecord } from "../enforcement/record.ts";
-import { appendRecord, loadJournal } from "../journal/store.ts";
-import { appendWork, loadWork } from "../journal/work.ts";
+import { loadRuns, type RunRecord } from "../enforcement/record.ts";
+import { appendWhole } from "../journal/append.ts";
+import { loadJournal } from "../journal/store.ts";
+import { storeDir } from "../journal/stores.ts";
+import { loadWork } from "../journal/work.ts";
 import type { Decision, WorkOrderRecord } from "../journal/record.ts";
 import { RECORD_STORES } from "./project.ts";
 import { ATTRIBUTES_FILE, ATTRIBUTES_TEXT, ATTRIBUTE_LINES, EARLIER_IGNORE_TEXTS, IGNORE_FILE, IGNORE_TEXT, keepAttributes, keepIgnore, keepStateFiles } from "./state-files.ts";
@@ -56,11 +58,17 @@ function run(at: string, name: string): RunRecord {
   };
 }
 
-/** One record in every record store, all under the one session, as a branch's work appends them. */
+/** A store's legacy session file, the one file per session releases before sealed shards append to (journal/shards.ts). */
+function legacy(root: string, store: "journal" | "work" | "runs"): string {
+  mkdirSync(join(root, storeDir(store)), { recursive: true });
+  return join(root, storeDir(store), `${SESSION}.jsonl`);
+}
+
+/** One record in every record store, all under the one session, appended to its legacy session file as a release before sealed shards appends it. */
 function appendAll(root: string, n: string, at: string): void {
-  appendRecord(root, decision(n, at));
-  appendWork(root, order(n, at));
-  appendRun(root, run(at, `invariant ${n}`));
+  appendWhole(legacy(root, "journal"), `${JSON.stringify(decision(n, at))}\n`);
+  appendWhole(legacy(root, "work"), `${JSON.stringify(order(n, at))}\n`);
+  appendWhole(legacy(root, "runs"), `${JSON.stringify(run(at, `invariant ${n}`))}\n`);
 }
 
 /**

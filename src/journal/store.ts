@@ -1,9 +1,10 @@
 /**
  * Where the journal lives and how it is read back.
  *
- * One JSONL file per session under .coherence/journal. A write appends one
- * line and never rewrites; a read merges every session file into one timeline
- * ordered by time. A line that will not parse is reported with its file and
+ * Sealed shards per session under .coherence/journal (shards.ts), beside the
+ * legacy one-file-per-session files. A write appends one record and never
+ * rewrites; a read merges every store file into one timeline ordered by
+ * time. A line that will not parse is reported with its file and
  * line number and skipped, never silently dropped: a crashed write leaves a
  * partial last line, and the reader must say so rather than hide it.
  */
@@ -14,7 +15,8 @@ import { join } from "node:path";
 import { appendWhole, storeLines } from "./append.ts";
 import { JournalError } from "./args.ts";
 import { isKind, type JournalRecord } from "./record.ts";
-import { storeDir } from "./stores.ts";
+import { shardFor } from "./shards.ts";
+import { isStoreFile, storeDir } from "./stores.ts";
 import { SESSION_TOKEN, workBinding } from "./work.ts";
 
 export const JOURNAL_DIR = storeDir("journal");
@@ -40,11 +42,18 @@ export function sessionFile(cwd: string, session: string): string {
  * record as written.
  */
 export function appendRecord(cwd: string, record: JournalRecord): JournalRecord {
-  const file = sessionFile(cwd, record.session);
+  return appendRecordTo(cwd, record).record;
+}
+
+/** appendRecord, with the shard the record went to, relative to the project root. */
+export function appendRecordTo(cwd: string, record: JournalRecord): { record: JournalRecord; file: string } {
+  sessionFile(cwd, record.session);
   const bound: JournalRecord = { ...record, ...workBinding(cwd, record.session, record.work) };
   mkdirSync(journalDir(cwd), { recursive: true });
-  appendWhole(file, `${JSON.stringify(bound)}\n`);
-  return bound;
+  const shard = shardFor(cwd, "journal", record.session);
+  appendWhole(shard.file, `${JSON.stringify(bound)}\n`);
+  shard.kept();
+  return { record: bound, file: join(JOURNAL_DIR, shard.name) };
 }
 
 export interface Damaged {
@@ -79,7 +88,7 @@ export function journalFileKeys(cwd: string): Map<string, string> {
   const dir = journalDir(cwd);
   const out = new Map<string, string>();
   if (!existsSync(dir)) return out;
-  for (const name of readdirSync(dir).filter((n) => n.endsWith(".jsonl")).sort()) {
+  for (const name of readdirSync(dir).filter(isStoreFile).sort()) {
     try {
       const s = statSync(join(dir, name));
       out.set(name, `${s.dev}:${s.ino}:${s.size}:${s.mtimeMs}:${s.ctimeMs}`);
@@ -96,7 +105,7 @@ export function loadJournalFiles(cwd: string, names?: readonly string[]): Loaded
   const loaded: Loaded = { records: [], damaged: [] };
   if (!existsSync(dir)) return loaded;
   const files = (names ?? readdirSync(dir))
-    .filter((name) => name.endsWith(".jsonl"))
+    .filter(isStoreFile)
     .sort();
   const seen = new Set<string>();
   for (const name of files) {

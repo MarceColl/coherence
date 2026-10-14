@@ -12,6 +12,7 @@
  */
 
 import assert from "node:assert/strict";
+import { sessionText } from "../journal/shard-fixture.ts";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync, appendFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -115,7 +116,8 @@ function family(key: string): string {
     .replace(/\bC\d+\b/g, "CN")
     .replace(/note-\d+/g, "note-N")
     .replace(/part-\d+/g, "part-N")
-    .replace(/\/h\d+\.jsonl/g, "/hN.jsonl");
+    .replace(/\/h\d+\.jsonl/g, "/hN.jsonl")
+    .replace(/\.[0-9a-f]{8}\.(jsonl|jsonseq)\b/g, ".<token>.$1");
 }
 
 /** A call's work as weights by family: what the budget is judged on. */
@@ -141,7 +143,7 @@ const SPECS = /proj\/src\/cN\/(CN\.spec\.md|\.git|pyvenv\.cfg)$|ls-files .*\*\.s
 // shard and the memo exist so that no hook reads them. The index's fold reads back the line the edit's check just appended to the
 // session's own file; workOf sets those bytes aside by the read's position, so a read of any run file's older bytes, the session's own
 // included, by any function, is in no family.
-const RUNS = /^fs (statSync|lstatSync|existsSync|readdirSync|realpathSync) .*proj\/\.coherence\/runs(\/hN\.jsonl)?$|^fs readFileSync .*proj\/\.coherence\/cache\/(run-index\.json|run-sites\/[^/]+\.jsonl\.json)$/;
+const RUNS = /^fs (statSync|lstatSync|existsSync|readdirSync|realpathSync) .*proj\/\.coherence\/runs(\/hN\.jsonl)?$|^fs readFileSync .*proj\/\.coherence\/cache\/(run-index\.json|run-sites\/[^/]+\.jsonl\.json|shards\/[^/]+\.json)$/;
 // The vocabulary an edit judges against: the lexicons, the session's baseline, the kept state's meta and the buckets it reads, one of 64
 // each. These grow with the vocabulary and the project's terms, never with the corpus's lines read or its history.
 const VOCABULARY = /^fs (readFileSync|promises\.readFile) .*(proj\/lexicon\.json|docs\/lexicon\.json|\.coherence\/lexicon\/sessions\/[^/]+\.json|\.coherence\/cache\/vocabulary\/(meta\.json|declared\.json|files\/\d+\.json|terms\/\d+\.json))$/;
@@ -253,7 +255,7 @@ test("an edit pays for the files it names, the specs and the history's file list
       out[where] = { pre: await workOf(project, "PreToolUse", input), post: await workOf(project, "PostToolUse", input) };
     }
     // The edit's check appended its run, ungraded: deriving a state would read the whole model and history, and the invariant floor counts it nowhere.
-    const last = readFileSync(join(project.root, ".coherence", "runs", `${SESSION}.jsonl`), "utf8").trim().split("\n").at(-1)!;
+    const last = sessionText(join(project.root, ".coherence", "runs"), SESSION).trim().split("\n").at(-1)!;
     assert.ok((JSON.parse(last) as RunRecord).invariants.every((e) => e.ungraded === true && e.state === undefined), "the edit's check recorded its entries ungraded");
     return out;
   });
@@ -506,7 +508,7 @@ test("in a project of two languages, an edit's check asks the language the last 
     writeFileSync(join(root, "src/use.ts"), "export const SECRET = 2;\n");
     const python = { ...NO_INSTRUMENT, language: "python" } as LanguageAdapter;
     await runHook("PostToolUse", { cwd: root, session_id: "m", tool_name: "Edit", tool_input: { file_path: join(root, "src/use.ts") } }, root, { adapter: python });
-    const last = readFileSync(join(root, ".coherence", "runs", "m.jsonl"), "utf8").trim().split("\n").at(-1)!;
+    const last = sessionText(join(root, ".coherence", "runs"), "m").trim().split("\n").at(-1)!;
     assert.deepEqual((JSON.parse(last) as RunRecord).invariants.map((e) => e.language), ["python"], "the edit's check asked Python first, and recorded it so");
   } finally {
     rmSync(root, { recursive: true, force: true });

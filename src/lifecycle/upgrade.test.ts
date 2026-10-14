@@ -8,6 +8,7 @@
  */
 
 import assert from "node:assert/strict";
+import { onlyFile } from "../journal/shard-fixture.ts";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -125,7 +126,7 @@ test("an adopter that enacted every kernel practice as an earlier release taught
         const kept = new Set([...now.steps.map((s) => normalize(s.text)), ...now.pitfalls.map((pf) => normalize(pf.text))]);
         if ([...old.steps.map((s) => s.text), ...old.pitfalls.map((pf) => pf.text)].some((t) => !kept.has(normalize(t)))) lossy.push(`${tag} ${id}`);
       }
-      const file = join(root, ".coherence", "journal", "earlier.jsonl");
+      const file = onlyFile(join(root, ".coherence", "journal"), "earlier");
       const rewritten = readFileSync(file, "utf8").split("\n").map((line) => {
         if (!line.includes('"kind":"enactment"')) return line;
         const record = JSON.parse(line) as { practice: string; version: string; steps: { text: string; leaves?: string }[]; pitfalls: string[]; results: Record<string, unknown> };

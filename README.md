@@ -228,11 +228,12 @@ record carries its session and agent. If a bad call was made along the way,
 it's right there in the history instead of buried in the code, and a later
 session can retract it and say what refuted it.
 
-The journal, the runs and the work orders are committed with the code, one
-append-only file per session under `.coherence/`. Coherence writes a
-`.coherence/.gitattributes` that merges those files by keeping both sides'
-lines, so stacked branches that recorded in the same session merge and rebase
-without a conflict. You don't have to do anything to get it.
+The journal, the runs and the work orders are committed with the code, as
+append-only files per session under `.coherence/`. A writer starts a new file
+(a sealed shard) whenever HEAD or the branch moves, so no file is ever
+written from two branches, and parallel or stacked branches that recorded in
+the same session land by merge, squash or rebase on GitHub without a
+conflict (docs/records-layout.md). You don't have to do anything to get it.
 
 Here is one decision as the Journal view shows it: what was chosen, the
 alternatives rejected, the reason, the human words that prompted it, and the

@@ -733,14 +733,16 @@ test("a project carrying its lexicon under the retired name is refused with the 
 });
 
 test("rulings recorded under the retired verb still count: the journal is read as written", async () => {
-  const { sessionFile } = await import("../journal/store.ts");
+  const { sessionFiles, sessionText } = await import("../journal/shard-fixture.ts");
   const { retiredLexiconNames } = await import("./project.ts");
   const [old] = await retiredLexiconNames();
   assert.ok(old !== undefined);
   const root = fixture();
   const rewrite = (verb: string): void => {
-    const path = sessionFile(root, who.session);
-    writeFileSync(path, readFileSync(path, "utf8").replaceAll(`"chose":"lexicon ${verb} `, `"chose":"${old} ${verb} `));
+    for (const name of sessionFiles(join(root, ".coherence", "journal"), who.session)) {
+      const path = join(root, ".coherence", "journal", name);
+      writeFileSync(path, readFileSync(path, "utf8").replaceAll(`"chose":"lexicon ${verb} `, `"chose":"${old} ${verb} `));
+    }
   };
   try {
     const g = JSON.parse(readFileSync(join(root, "lexicon.json"), "utf8"));
@@ -750,13 +752,13 @@ test("rulings recorded under the retired verb still count: the journal is read a
     const context = (await lexiconCoverage(root)).terms.find((t) => t.term === "exposure")!.contexts.find((c) => c.component === "money")!;
     await reviewLexicon(root, "exposure", "money", context.fingerprint, "confirmed", who, "correct unit", ["time"], "owner: USD is correct");
     rewrite("review");
-    assert.match(readFileSync(sessionFile(root, who.session), "utf8"), new RegExp(`"chose":"${old} review `), "the fixture holds a review under the retired verb");
+    assert.match(sessionText(join(root, ".coherence", "journal"), who.session), new RegExp(`"chose":"${old} review `), "the fixture holds a review under the retired verb");
     const after = (await lexiconCoverage(root)).terms.find((t) => t.term === "exposure")!.contexts.find((c) => c.component === "money")!;
     assert.equal(after.disposition, "confirmed", "a review recorded before the rename keeps its ruling");
     const change = await propose(root, { action: "define", name: "exposure", definition: "Money at risk, in USD.", because: "clarified" });
     applyProposal(root, change.id, who, "clarified", ["none"]);
     rewrite("apply");
-    assert.match(readFileSync(sessionFile(root, who.session), "utf8"), new RegExp(`"chose":"${old} apply `));
+    assert.match(sessionText(join(root, ".coherence", "journal"), who.session), new RegExp(`"chose":"${old} apply `));
     assert.throws(() => applyProposal(root, change.id, who, "clarified", ["none"]), /already applied/, "an application recorded before the rename still counts as applied");
   } finally {
     rmSync(root, { recursive: true, force: true });

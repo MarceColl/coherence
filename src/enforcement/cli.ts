@@ -15,7 +15,7 @@
 
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { relative, resolve, sep } from "node:path";
+import { basename, relative, resolve, sep } from "node:path";
 import { adapterFor } from "../adapters/index.ts";
 import { registryOf, type Registry } from "../adapters/project-config.ts";
 import { JournalError, parseFlags } from "../journal/args.ts";
@@ -85,7 +85,7 @@ export function formatRun(outcome: RunOutcome): string {
   const passes = r.invariants.filter((e) => e.verdict === "pass").length;
   const notRun = r.invariants.length - fails - passes;
   lines.push(
-    `run recorded in ${RUNS_DIR}/${r.session}.jsonl: ${r.invariants.length} enforcement${r.invariants.length === 1 ? "" : "s"}, ${passes} pass, ${fails} fail, ${notRun} not run; instrument ${r.instrument.language} (${r.instrument.server}); ${ms(r.latency)}`,
+    `run recorded in ${RUNS_DIR}/${outcome.file === undefined ? `${r.session}.jsonl` : basename(outcome.file)}: ${r.invariants.length} enforcement${r.invariants.length === 1 ? "" : "s"}, ${passes} pass, ${fails} fail, ${notRun} not run; instrument ${r.instrument.language} (${r.instrument.server}); ${ms(r.latency)}`,
   );
   if (outcome.instrumentReason !== undefined) lines.push(`instrument unavailable: ${outcome.instrumentReason}`);
   if (outcome.observation !== undefined) lines.push(formatObservationSummary(outcome.observation.record));
@@ -109,7 +109,7 @@ function formatEach(each: EachOutcome): string[] {
     }
   }
   const passes = each.details.filter((d) => d.entry.verdict === "pass").length;
-  lines.push(`per-test run recorded in ${RUNS_DIR}/${each.record.session}.jsonl: ${each.details.length} alone, ${passes} pass; ${ms(each.record.latency)}`);
+  lines.push(`per-test run recorded in ${RUNS_DIR}/${basename(each.file)}: ${each.details.length} alone, ${passes} pass; ${ms(each.record.latency)}`);
   if (each.hidden.length > 0) {
     lines.push(`passed batched but fail alone (${each.hidden.length}): each passed on what another test left behind`);
     for (const d of each.hidden) lines.push(`  ✕ ${d.entry.component}/${d.entry.name}`);
@@ -382,6 +382,7 @@ export async function refuteCommand(argv: string[], io: Io): Promise<number> {
   const agent = parsed.one.get("agent") ?? "main";
   const { commit, dirty } = gitState(root);
   const written: RefutationRecord[] = [];
+  const files = new Map<RefutationRecord, string>();
   // The verdict comes from the pass itself, so refute asks the same question a run asks, through the same
   // door: performRun stays the only site that reaches the batched runner, and the runner that can report per
   // test is the one consulted, so a suite exiting non-zero for a reason that is not this test cannot record a
@@ -428,7 +429,7 @@ export async function refuteCommand(argv: string[], io: Io): Promise<number> {
       commit,
       dirty,
     };
-    appendRefutation(root, record);
+    files.set(record, appendRefutation(root, record));
     written.push(record);
   }
   if (parsed.switches.has("json")) {
@@ -438,7 +439,7 @@ export async function refuteCommand(argv: string[], io: Io): Promise<number> {
   for (const record of written) {
     io.out(`refuted ${folder}/${name} (${record.form}): ${record.broke}`);
     io.out(`  the detector went red: ${record.reason}`);
-    io.out(`  recorded in ${RUNS_DIR}/${session}.jsonl at ${record.at}`);
+    io.out(`  recorded in ${RUNS_DIR}/${basename(files.get(record) ?? `${session}.jsonl`)} at ${record.at}`);
   }
   io.out("now restore the code and run: run — the refutation counts as witnessed once a later run finds the same totality oracle passing");
   return 0;

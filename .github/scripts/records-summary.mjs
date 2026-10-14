@@ -7,7 +7,7 @@
 //
 //   node .github/scripts/records-summary.mjs <base> <head>
 import { execFileSync } from "node:child_process";
-import { STORES, STORE_NAMES } from "../../src/journal/stores.ts";
+import { STORES, STORE_NAMES, recordTexts } from "../../src/journal/stores.ts";
 
 const [base, head] = process.argv.slice(2);
 if (!base || !head) {
@@ -26,10 +26,14 @@ for (const line of diff.split("\n")) {
   }
   if (!line.startsWith("+") || area === undefined) continue;
   bytes += line.length;
-  try {
-    added[area].push(JSON.parse(line.slice(1)));
-  } catch {
-    // A line that is not one record (a torn write) is counted by bytes alone.
+  // A packed shard's one line holds every record it has, each ended by the record separator.
+  for (const text of recordTexts(line.slice(1))) {
+    if (text.trim() === "") continue;
+    try {
+      added[area].push(JSON.parse(text));
+    } catch {
+      // A text that is not one record (a torn write) is counted by bytes alone.
+    }
   }
 }
 

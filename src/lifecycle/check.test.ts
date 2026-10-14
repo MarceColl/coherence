@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { sessionText } from "../journal/shard-fixture.ts";
 import { readFileSync } from "node:fs";
 import { chmod, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -356,7 +357,7 @@ test("the baseline only shrinks: a fresh adoption passes once baselined, a new f
     assert.equal(hasFindings(taken), false, "after the baseline the check passes");
     assert.match(formatReport(taken), /^BASELINED +1 rejected name, 2 unknown nouns held since adoption \(d-[0-9a-f]+\); not failing$/m);
     assert.match(formatReport(taken), /\n0 rejected names, 0 unknown nouns \(6 files\)\n$/);
-    const recorded = readFileSync(join(dir, ".coherence", "journal", "s1.jsonl"), "utf8");
+    const recorded = sessionText(join(dir, ".coherence", "journal"), "s1");
     assert.ok(!recorded.includes("doohickey"), "the record never spells the name it excuses");
 
     // A new finding fails; editing the baselined line makes it new.
