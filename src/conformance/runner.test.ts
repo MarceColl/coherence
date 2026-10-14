@@ -16,7 +16,7 @@ import { captureHash, replayHash } from "./hashes.ts";
 import { counterProject } from "./replay-fixture.ts";
 import { NO_TRACE_CAUSE, capture, captureEnv } from "./runner.ts";
 import { conformanceStanding } from "./standing.ts";
-import { loadVerdicts, readCapture } from "./store.ts";
+import { appendVerdict, loadVerdicts, readCapture } from "./store.ts";
 
 async function conform(root: string, ...argv: string[]): Promise<{ code: number; out: string[]; err: string[] }> {
   const out: string[] = [];
@@ -67,7 +67,18 @@ test("the capture hash moves with a test or source file and the client, never wi
     const replay = replayHash(root, first, model, config.models[0]!, readQuintConfig(root), "0.33.0");
     appendFileSync(join(root, "src/counter/Counter.qnt"), "// a comment\n");
     assert.equal(captureHash(root, config), first, "editing the model keeps the capture");
-    assert.notEqual(replayHash(root, first, model, config.models[0]!, readQuintConfig(root), "0.33.0"), replay, "and changes the replay");
+    const edited = replayHash(root, first, model, config.models[0]!, readQuintConfig(root), "0.33.0");
+    assert.notEqual(edited, replay, "and changes the replay");
+    const quint = readQuintConfig(root);
+    for (const bound of [{ seed: "0x7" }, { maxSamples: quint.maxSamples + 1 }, { maxSteps: quint.maxSteps + 1 }, { verifySteps: quint.verifySteps + 1 }])
+      assert.notEqual(replayHash(root, first, model, config.models[0]!, { ...quint, ...bound }, "0.33.0"), edited, `the coverage probe's bounds change the replay: ${JSON.stringify(bound)}`);
+    // A model the spec's model imports is part of the model: editing it changes the replay.
+    writeFileSync(join(root, "src/counter/Lib.qnt"), "module Lib {\n  pure val libValue = 1\n}\n");
+    writeFileSync(join(root, "src/counter/Counter.qnt"), readFileSync(join(root, "src/counter/Counter.qnt"), "utf8").replace("module Counter {", 'module Counter {\n  import Lib.* from "./Lib"'));
+    const importing = replayHash(root, first, model, config.models[0]!, quint, "0.33.0");
+    appendFileSync(join(root, "src/counter/Lib.qnt"), "// edited\n");
+    assert.notEqual(replayHash(root, first, model, config.models[0]!, quint, "0.33.0"), importing, "editing an imported model changes the replay");
+    assert.equal(captureHash(root, config), first, "and keeps the capture");
     appendFileSync(join(root, "src/counter/counter.test.ts"), "// a comment\n");
     const second = captureHash(root, config);
     assert.notEqual(second, first, "editing a test file changes the capture");
@@ -105,8 +116,17 @@ test("conform captures once, replays a kept capture without running the tests, r
     assert.match(again.out.join("\n"), /src\/counter: unchanged since .*: agrees/);
     assert.equal(loadVerdicts(root).length, 2, "a verdict read back is not appended again");
 
-    // The code moved: --replay-only refuses, and a plain conform captures again.
+    // A later verdict of the same replay, as conform --capture appends, is the one read back: an older agreement never masks a newer disagreement.
+    const agreed = loadVerdicts(root).pop()!;
+    appendVerdict(root, { ...agreed, at: new Date(Date.parse(agreed.at) + 1000).toISOString(), session: "s2", verdict: "disagrees", failures: [{ side: "capture-side", cause: "a later capture disagreed" }] });
+    const masked = await conform(root);
+    assert.equal(masked.code, 1);
+    assert.match(masked.out.join("\n"), /src\/counter: unchanged since .*: disagrees/);
+    assert.equal(await conformanceStanding(root, "src/counter"), "disagrees");
+
+    // The code moved: an agreeing verdict of the code before is stale, never current; --replay-only refuses, and a plain conform captures again.
     appendFileSync(join(root, "src/counter/counter.ts"), "// edited\n");
+    assert.equal(await conformanceStanding(root, "src/counter"), "stale", "a verdict of code since edited is not current");
     const refused = await conform(root, "--replay-only");
     assert.equal(refused.code, 1);
     assert.match(refused.err.join("\n"), /--replay-only, and no capture is kept for the code as it is/);

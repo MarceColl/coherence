@@ -130,12 +130,18 @@ node src/cli.ts conform [--model <folder>] [--capture | --replay-only] [--verbos
    existed would cache its absence and log nothing, with no error.
 4. Each test's events are queued only when the test passed; a failed test's
    are discarded. A capture with no trace fails with its likely causes.
+   While two tests that do not nest run at once in one process, an event
+   could belong to either: it is counted unattributed, never given to one,
+   and the capture fails.
 
 The capture is kept under its **capture hash** (the protocol, the vendored
 client, the capture-side config, and every project file a test could run;
-never a model, a spec or a record). The next `conform` replays the kept
+never a model, a spec or a record). The **replay hash** adds the model, every
+`.qnt` file it imports, the replay-side config, and quint's version, backend,
+seed and simulation and verify bounds. The next `conform` replays the kept
 capture without running the tests when only the model or the replay-side
-config moved, and reads back the verdict it already holds when nothing did.
+config moved, and reads back the latest verdict it holds for the same replay
+when nothing did, so a forced capture's newer verdict outweighs an older one.
 `--capture` forces a capture; `--replay-only` refuses to take one. Nobody has
 to reason about staleness.
 
@@ -146,7 +152,12 @@ For each trace, event by event: the logged name resolves through `names`
 are pinned by name; a parameter nothing pins is searched over its domain
 within `search`, and a bound exceeded fails the trace; every guard is
 evaluated on the state the trace reached. A failing guard is an unmatched
-trace, never a skipped step. Quint offers no external pinning, so replay
+trace, never a skipped step. Where a search left several values enabled and
+the first one fails a later step, the trace is replayed again with each other
+enabled value at each earlier step, within `perRun` runs; it matches when any
+run of choices replays every step. A guard `<parameter> == <expression>` is a
+conformance fact only when no other conjunct and not the expression reads
+that parameter; an equality on an input the action also reads is a guard. Quint offers no external pinning, so replay
 writes quint: a module per capture and model that imports the model, records
 every guard and landmark in variables of its own, and a second module that
 runs each matched trace again through the model's own actions, which must
@@ -164,9 +175,14 @@ behavior families (covered, simulated, blind).
 Green needs every trace to replay, every landmark to be reached, and every
 guard scenario found true and false, or acknowledged in the config as
 unfalsifiable with why. A guard never found false that the probe can falsify
-is a gap: no test exercises its refusal. The probe samples (`quint run` with
-witnesses), so "unfalsifiable" means not falsified within the configured
-samples, and the report says so. A drop in the pinning ratio against the
+is a gap: no test exercises its refusal. The probe samples first (`quint run`
+with witnesses); a guard no sample made false is then model-checked (`quint
+verify` within `quint.verifySteps`), and only a check that finds no falsifying
+state calls it unfalsifiable. A checker that cannot start leaves the guard
+undecided, which fails. With `quint.verify` off the config accepts sampling
+alone, and the report says so. A blind family's cause is ruled in order: a
+test command that names part of the suite, then an action no trace logs, and
+only then a genuine gap. A drop in the pinning ratio against the
 model's last verdict fails the run.
 
 Each failure names the side that can fix it:
@@ -195,4 +211,5 @@ disagrees.
 | A constant identity | every operation lands on one instance | log a real id |
 | One scope for several components | traces mix | scopes are required, filtered per model, and exclusions reported |
 | A failed test's trace kept | a green run of events that never happened | the collector discards on failed |
+| Tests run concurrently in one process | one test's events in another's trace | the hooks name no test while two run side by side; those events count unattributed and fail the capture |
 | A guard relaxed to make a trace pass | a real divergence edited away | a failing guard is a finding |

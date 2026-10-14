@@ -72,7 +72,7 @@ export function reportModel(input: {
   lines.push(`${base.model} (${base.file}): ${input.replayOnly ? `replay only: capture ${base.captureHash.slice(0, 12)} is current` : `captured ${base.captureHash.slice(0, 12)}`}`);
   if (traces.length === 0) failures.push({ side: "capture-side", cause: "no trace of this model's scopes reached the collector: are its sites instrumented with its scope, and do the tests that reach them pass?" });
   if (input.failure !== undefined) failures.push({ side: "replay-side", cause: input.failure });
-  if (meta.clients.dropped > 0 || meta.clients.unattributed > 0) failures.push({ side: "capture-side", cause: `events lost in the capture: ${meta.clients.dropped} dropped, ${meta.clients.unattributed} logged outside any test` });
+  if (meta.clients.dropped > 0 || meta.clients.unattributed > 0) failures.push({ side: "capture-side", cause: `events lost in the capture: ${meta.clients.dropped} dropped, ${meta.clients.unattributed} logged outside any test, or while two tests ran at once in one process` });
 
   lines.push(`  traces: ${matched}/${traces.length} replay`);
   for (const trace of traces) {
@@ -123,7 +123,7 @@ export function reportModel(input: {
         failures.push({ side: "replay-side", cause: `${s.id} (${s.text}) was never false and the probe could not make it false (${coverage.probe}): widen the domain, or acknowledge it in conformance.models.${base.model}.acknowledged with why` });
       } else if (s.outcome === "unexercised") {
         gaps.push(s.id);
-        failures.push({ side: "capture-side", cause: `${s.id} (${s.text}) was ${s.seenTrue ? "never found false" : s.seenFalse ? "never found true: its action never fired" : "never evaluated: no test reached its action"}${coverage.probeFailure === undefined ? "" : `; the probe could not run: ${coverage.probeFailure}`}` });
+        failures.push({ side: "capture-side", cause: `${s.id} (${s.text}) was ${s.seenTrue ? "never found false" : s.seenFalse ? "never found true: its action never fired" : "never evaluated: no test reached its action"}${coverage.probeFailure === undefined ? "" : `; the probe could not run: ${coverage.probeFailure}`}${s.unproven === undefined ? "" : `; whether it can be false is undecided: ${s.unproven}`}` });
       }
     }
     const tested = coverage.scenarios.filter((s) => s.outcome === "tested" || s.outcome === "acknowledged").length;

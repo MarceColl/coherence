@@ -2,17 +2,20 @@
  * Replay, gated against a real capture before it is trusted: the counter
  * fixture's own tests run under a collector once, and the correct model must
  * replay every trace while each deliberately wrong model fails. Then the
- * search bounds, the report's pinning ratio and failure sides, and coverage's
- * three guard scenario outcomes. Needs quint, as CI installs it.
+ * search bounds and the search over the choices a step leaves open, which
+ * equalities are conformance facts, the report's pinning ratio and failure
+ * sides, coverage's guard scenario outcomes with the model check behind an
+ * unfalsifiable one, and the order a blind family's cause is ruled in. Needs
+ * quint, as CI installs it.
  */
 
 import assert from "node:assert/strict";
-import { rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { CapturedTrace } from "./collector.ts";
 import { DEFAULT_SEARCH, readConformanceConfig, readQuintConfig, type ModelConformance } from "./config.ts";
-import { coverage } from "./coverage.ts";
+import { blindCause, coverage, testScope } from "./coverage.ts";
 import { readModel, type ReadModel } from "./model-ir.ts";
 import { COUNTER_MODEL, WRONG_MODELS, counterProject } from "./replay-fixture.ts";
 import { planTrace, replay } from "./replay.ts";
@@ -138,4 +141,87 @@ test("guard scenario: a guard found true and false is tested, one never false th
   assert.equal(gap.landmarks.find((l) => l.name === "landmark_high")?.reached, true);
   const report = reportModel({ base: { at: "x", session: "s", agent: "a", commit: null, dirty: false, model: "src/counter", file: "f", captureHash: "c", replayHash: "r" }, meta, traces: narrowed.traces, coverage: gap, excluded: {}, moved: { prior: false, capture: false, model: false }, replayOnly: true });
   assert.ok(report.verdict.failures.some((f) => f.side === "capture-side" && /gap: bump#2 \(by <= 3\) is falsifiable but no test exercises its refusal path/.test(f.cause)));
+});
+
+test("an equality on a parameter the action reads elsewhere is a guard scenario; only a parameter held to a computed value and read nowhere else is a conformance fact", async () => {
+  const model = await modelOf(COUNTER_MODEL.replace("    by <= 3,\n", "    by == 2,\n"), "EqualityGuard");
+  const facts = (name: string): (string | undefined)[] => model.actions.find((a) => a.name === name)!.guards.map((g) => g.fact);
+  assert.deepEqual(facts("bump"), [undefined, undefined, "count_after"], "by == 2 guards an input the update reads: it is a guard, never a fact");
+  assert.deepEqual(facts("reset"), [undefined, "count_after"]);
+});
+
+/** A model where the first enabled choice of a searched parameter fails a later step and another choice replays it. */
+const PICK_MODEL = `module Counter {
+  var x: int
+
+  pure val domain_by = 1.to(3)
+
+  action init = x' = 0
+
+  action bump(by: int): bool = all {
+    by > 0,
+    x' = x + by,
+  }
+
+  action check(x_now: int): bool = all {
+    x_now == x,
+    x' = x,
+  }
+
+  action step = any {
+    nondet by = domain_by.oneOf()
+    bump(by),
+    check(x),
+  }
+}
+`;
+
+test("replay searches the choices a step leaves open: when the first enabled value fails a later step, another enabled value that replays the trace matches it", async () => {
+  const model = await modelOf(PICK_MODEL, "Pick");
+  const trace: CapturedTrace = { test: "t", events: [{ action: "bump", scopes: ["counter"], arguments: [], seq: 1, pid: 1 }, { action: "check", scopes: ["counter"], arguments: [{ name: "x_now", value: 2 }], seq: 2, pid: 1 }] };
+  const run = await replay([trace], model, counter, readQuintConfig(root), join(root, ".scratch", "pick"));
+  assert.equal(run.failure, undefined, run.failure);
+  assert.equal(run.traces[0]!.matched, true, run.traces[0]!.cause);
+  assert.deepEqual(run.traces[0]!.steps[0]!.searched, [{ param: "by", tried: 3, chose: "2" }], "by = 1 fires first and fails the check; by = 2 replays it");
+  const none: CapturedTrace = { ...trace, events: [trace.events[0]!, { ...trace.events[1]!, arguments: [{ name: "x_now", value: 7 }] }] };
+  const unmatched = await replay([none], model, counter, readQuintConfig(root), join(root, ".scratch", "pick-none"));
+  assert.equal(unmatched.traces[0]!.matched, false, "no choice replays it: the trace fails, never passes on a guess");
+  assert.equal(unmatched.traces[0]!.failedAt, 2);
+});
+
+test("a blind family's cause is ruled in order: a test command that names part of the suite first, then an action no trace logs, and only then a genuine gap", () => {
+  assert.equal(testScope(["node", "--test", "--test-concurrency=1"]), undefined);
+  assert.equal(testScope(["node", "--test", "src/journal/journal.test.ts"]), "src/journal/journal.test.ts");
+  assert.equal(testScope("npm test -- --test-name-pattern=journal"), "--test-name-pattern=journal");
+  assert.match(blindCause(["node", "--test", "src/journal/journal.test.ts"], ["owner"]), /^the test command may run part of the suite \(it names src\/journal\/journal\.test\.ts\): .*then check that owner is instrumented/);
+  assert.match(blindCause(undefined, []), /^the test command may run part of the suite \(it names nothing conform can see/);
+  assert.match(blindCause(["node", "--test"], ["owner"]), /^not instrumented: no trace logs an event that resolves to owner/);
+  assert.match(blindCause(["node", "--test"], []), /^a genuine gap: the whole suite ran/);
+});
+
+test("a guard no sample makes false is model-checked before it reads unfalsifiable: a falsifying state makes it a gap, a checker that cannot start leaves it undecided, and only a check that finds none calls it unfalsifiable", async () => {
+  const { model, replayed } = await replayWith(COUNTER_MODEL, "Checked");
+  const real = process.env["COHERENCE_QUINT"] ?? "quint";
+  const answers = {
+    violation: `echo "[violation] Found an issue (1ms)."; echo "error: Invariant violated" >&2; exit 1`,
+    nojava: `echo "apalache-mc: line 83: exec: java: not found" >&2; exit 1`,
+    ok: `echo "[ok] No violation found (1ms)."; exit 0`,
+  };
+  const before = process.env["COHERENCE_QUINT"];
+  try {
+    for (const [answer, outcome] of [["violation", "gap"], ["nojava", "unexercised"], ["ok", "unfalsifiable"]] as const) {
+      const bin = join(root, ".scratch", `quint-${answer}`);
+      mkdirSync(join(root, ".scratch"), { recursive: true });
+      writeFileSync(bin, `#!/bin/sh\ncase "$1" in\nverify) ${answers[answer]};;\n*) exec ${JSON.stringify(real)} "$@";;\nesac\n`);
+      chmodSync(bin, 0o755);
+      process.env["COHERENCE_QUINT"] = bin;
+      const found = await coverage(traces, replayed.traces, model, counter, { ...readQuintConfig(root), verify: "apalache" }, join(root, ".scratch", `checked-${answer}`));
+      const bump = found.scenarios.find((s) => s.id === "bump#1")!;
+      assert.equal(bump.outcome, outcome, `verify answered ${answer}`);
+      if (answer === "nojava") assert.match(bump.unproven ?? "", /quint verify unavailable/);
+    }
+  } finally {
+    if (before === undefined) delete process.env["COHERENCE_QUINT"];
+    else process.env["COHERENCE_QUINT"] = before;
+  }
 });

@@ -15,9 +15,11 @@
  * A conjunct that assigns a variable inside something else (an if, another
  * action) mixes a guard with an update, and replay could not tell which of the
  * two refused a step; such an action is a model problem with its cause, never
- * replayed loosely. A guard of the form <parameter> == <expression> is a
- * conformance fact: it holds the model's computed state to the value the code
- * logged, and it is never a guard scenario.
+ * replayed loosely. A guard of the form <parameter> == <expression>, whose
+ * parameter no other conjunct and not the expression reads, is a conformance
+ * fact: it holds the model's computed state to the value the code logged, and
+ * it is never a guard scenario. An equality on a parameter the action also
+ * reads elsewhere (target == "active") is an input guard like any other.
  */
 
 import { readFileSync } from "node:fs";
@@ -95,6 +97,13 @@ function updates(node: IrNode | undefined, actions: ReadonlySet<string>, shadowe
   return [...(node.args ?? []), node.expr, node.opdef].some((child) => updates(child, actions, shadowed));
 }
 
+/** Whether a node reads a name anywhere below it. */
+function mentions(node: IrNode | undefined, name: string): boolean {
+  if (node === undefined) return false;
+  if (node.kind === "name" && node.name === name) return true;
+  return [...(node.args ?? []), node.expr, node.opdef].some((child) => mentions(child, name));
+}
+
 /**
  * Read a model's IR (quint parse --out) and source map into what replay
  * needs. `text` is the model file's text, from which each guard's source is
@@ -139,7 +148,8 @@ export function readModelIr(file: string, text: string, ir: unknown, sourceMap: 
       }
       const { text: source, line } = spanText(conjunct.id);
       const [left, right] = conjunct.kind === "app" && conjunct.opcode === "eq" ? (conjunct.args ?? []) : [];
-      const fact = [left, right].find((side) => side?.kind === "name" && paramNames.has(side.name ?? ""))?.name;
+      // A fact's parameter exists only to be held to the computed value: one the other side or any other conjunct reads is an input, and its equality an ordinary guard.
+      const fact = [left, right].find((side, i) => side?.kind === "name" && paramNames.has(side.name ?? "") && !mentions([left, right][1 - i], side.name!) && conjuncts.every((other) => other === conjunct || !mentions(other, side.name!)))?.name;
       guards.push({ index: guards.length + 1, text: source, line, ...(fact === undefined ? {} : { fact }) });
     }
     if (conjuncts.length > 0 && writes.length === 0 && vars.length > 0) problems.push(`${d.name}: it assigns no variable; replay drives actions that assign every variable they change`);

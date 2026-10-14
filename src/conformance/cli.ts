@@ -33,6 +33,9 @@ export const CONFORM_USAGE = [
   "  conform --collect   the collector alone, in the foreground: prints its URL for a runner conform does not spawn, and keeps the traces when stopped",
 ].join("\n");
 
+/** The test command a capture taken by conform --collect records: a runner conform did not start, whose scope it cannot see. */
+const EXTERNAL_RUNNER = "an external runner (conform --collect)";
+
 export async function conformCommand(argv: string[], io: Io): Promise<number> {
   let parsed;
   try {
@@ -109,7 +112,8 @@ export async function conformCommand(argv: string[], io: Io): Promise<number> {
   for (const { conformance, file } of files) {
     const replayed = replayHash(root, hash, { files: [file!] }, conformance, quint, version.version);
     const mine = earlier.filter((v) => v.model === conformance.folder);
-    const stored = parsed.switches.has("capture") ? undefined : mine.find((v) => v.replayHash === replayed);
+    // The latest verdict of this replay: a forced capture's newer disagreement outweighs an older agreement.
+    const stored = parsed.switches.has("capture") ? undefined : mine.filter((v) => v.replayHash === replayed).pop();
     if (stored !== undefined) {
       say(`${conformance.folder}: unchanged since ${stored.at}: ${stored.verdict} (${stored.matched}/${stored.total} traces, ${stored.pinned}/${stored.logged} logged args pin a step choice)`);
       for (const f of stored.failures) say(`    ${f.side}: ${f.test === undefined ? "" : `${f.test}: `}${f.cause}`);
@@ -121,7 +125,7 @@ export async function conformCommand(argv: string[], io: Io): Promise<number> {
     const scratch = captureScratch(root, hash);
     const model = await readModel(`${root}/${file!}`, quint, scratch);
     const replayedTraces = traces.length === 0 ? { traces: [] } : await replay(traces, model, conformance, quint, `${scratch}/${replayed.slice(0, 12)}`);
-    const covered = traces.length === 0 || replayedTraces.failure !== undefined ? undefined : await coverage(traces, replayedTraces.traces, model, conformance, quint, `${scratch}/${replayed.slice(0, 12)}-coverage`);
+    const covered = traces.length === 0 || replayedTraces.failure !== undefined ? undefined : await coverage(traces, replayedTraces.traces, model, conformance, quint, `${scratch}/${replayed.slice(0, 12)}-coverage`, kept.meta.testCommand === EXTERNAL_RUNNER ? undefined : kept.meta.testCommand);
     const lastAgreeing = [...mine].reverse().find((v) => v.verdict === "agrees");
     const last = mine[mine.length - 1];
     const report = reportModel({
@@ -159,7 +163,7 @@ async function collectInForeground(root: string, io: Io): Promise<number> {
   const traces = collector.drain();
   await collector.close();
   const { commit, dirty } = gitState(root);
-  const meta = { captureHash: captureHash(root, config), at: new Date().toISOString(), commit, dirty, buildCommand: null, testCommand: "an external runner (conform --collect)", exit: null, traces: traces.length, collector: { ...collector.stats }, clients: { posted: 0, acknowledged: 0, dropped: 0, unattributed: 0, processes: 0 } };
+  const meta = { captureHash: captureHash(root, config), at: new Date().toISOString(), commit, dirty, buildCommand: null, testCommand: EXTERNAL_RUNNER, exit: null, traces: traces.length, collector: { ...collector.stats }, clients: { posted: 0, acknowledged: 0, dropped: 0, unattributed: 0, processes: 0 } };
   if (traces.length === 0) {
     io.err("conform --collect: no trace reached the collector; nothing kept");
     return 1;

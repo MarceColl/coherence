@@ -14,11 +14,16 @@
  *                    widen the domain, or acknowledge it in the config with why.
  *   blind families   the behavior families the simulator reaches and no test
  *                    covers, each with its likeliest cause ruled in or out
- *                    first: an action no trace ever logs is not instrumented,
- *                    and only a family whose actions all are is a genuine gap.
+ *                    in order: a test command that names part of the suite
+ *                    first, then an action no trace ever logs (not
+ *                    instrumented), and only then a genuine gap.
  *
- * The probe samples (quint run with witnesses), so "never falsifiable" means
- * not falsified in the samples taken, and the report says so.
+ * The probe samples first (quint run with witnesses): a guard a sample makes
+ * false is falsifiable. A sample that never does proves nothing, so each such
+ * guard is then model-checked (quint verify, within the verify bound): only a
+ * check that finds no falsifying state calls it unfalsifiable, and a checker
+ * that cannot answer leaves it undecided, never unfalsifiable. With
+ * quint.verify off the config accepts sampling alone, and the report says so.
  */
 
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -26,7 +31,7 @@ import { dirname, join, relative } from "node:path";
 import type { CapturedTrace } from "./collector.ts";
 import type { ModelConformance, QuintConfig } from "./config.ts";
 import type { ReadModel } from "./model-ir.ts";
-import { runQuint } from "./quint.ts";
+import { runQuint, verify } from "./quint.ts";
 import { literal, fromItf } from "./quint-values.ts";
 import { REJECTED_ARGUMENT, type TraceResult } from "./replay.ts";
 
@@ -42,6 +47,8 @@ export interface GuardScenario {
   outcome: "tested" | "gap" | "unfalsifiable" | "acknowledged" | "unexercised";
   /** The acknowledgement's reason, when the config gives one. */
   because?: string;
+  /** Why the model checker could not decide whether it can be false, when no sample made it false and the check did not answer. */
+  unproven?: string;
 }
 
 export interface Coverage {
@@ -106,8 +113,23 @@ function simulatedFamilies(dir: string, landmarks: readonly string[]): string[][
   return families;
 }
 
-/** Coverage of the model by the replayed traces, with the probe and the simulation run from `scratch`. */
-export async function coverage(traces: readonly CapturedTrace[], results: readonly TraceResult[], model: ReadModel, conformance: ModelConformance, quint: QuintConfig, scratch: string): Promise<Coverage> {
+/** What narrows a test command to part of the suite: a name filter, or the test files, folders or globs it names; undefined when it names none. */
+export function testScope(command: string | readonly string[]): string | undefined {
+  const words = typeof command === "string" ? command.trim().split(/\s+/) : [...command];
+  const narrowing = words.slice(1).filter((w) => /^--?(test-name-pattern|test-skip-pattern|test-only|grep|match|filter|t|g)(=|$)/.test(w) || (!w.startsWith("-") && /[/*]|\.\w+$/.test(w)));
+  return narrowing.length === 0 ? undefined : narrowing.join(" ");
+}
+
+/** Why no test covers a family the simulator reaches, ruled in order: the test command's scope (unknown when conform did not start the runner), then an action no trace logs, and only then a genuine gap. */
+export function blindCause(testCommand: string | readonly string[] | undefined, uninstrumented: readonly string[]): string {
+  const scope = testCommand === undefined ? "nothing conform can see: a runner it did not start" : testScope(testCommand);
+  if (scope !== undefined) return `the test command may run part of the suite (it names ${scope}): run the whole suite before reading this family as a gap${uninstrumented.length === 0 ? "" : `, then check that ${uninstrumented.join(", ")} is instrumented`}`;
+  if (uninstrumented.length > 0) return `not instrumented: no trace logs an event that resolves to ${uninstrumented.join(", ")}`;
+  return "a genuine gap: the whole suite ran, every action is logged somewhere, and no test reaches this order";
+}
+
+/** Coverage of the model by the replayed traces, with the probe and the simulation run from `scratch`; `testCommand` is the one the capture ran, whose scope is ruled out before a blind family reads as a gap. */
+export async function coverage(traces: readonly CapturedTrace[], results: readonly TraceResult[], model: ReadModel, conformance: ModelConformance, quint: QuintConfig, scratch: string, testCommand?: string | readonly string[]): Promise<Coverage> {
   const matched = results.filter((r) => r.matched);
   const landmarks = model.landmarks.map((name) => ({ name, reached: matched.some((r) => r.family.includes(name)), tests: matched.filter((r) => r.family.includes(name)).length }));
   const seen = new Map<string, { t: boolean; f: boolean }>();
@@ -128,7 +150,7 @@ export async function coverage(traces: readonly CapturedTrace[], results: readon
 
   mkdirSync(scratch, { recursive: true });
   const options = { cwd: scratch, timeoutMs: quint.timeoutSeconds * 1000 };
-  const probe = `not falsified in ${quint.maxSamples} simulated traces of ${quint.maxSteps} steps`;
+  const probe = `not falsified in ${quint.maxSamples} simulated traces of ${quint.maxSteps} steps${quint.verify === "off" ? " (quint.verify is off: sampled, never model-checked)" : `, nor by quint verify (${quint.verify}) within ${quint.verifySteps} steps`}`;
   const domains = observedDomains(traces, model);
   const probed = scenarios.filter((s) => !s.seenFalse);
   const witnesses: { scenario: GuardScenario; name: string; expression: string }[] = [];
@@ -174,10 +196,24 @@ export async function coverage(traces: readonly CapturedTrace[], results: readon
   const run = await runQuint(argv, options);
   let probeFailure: string | undefined;
   if (run.outcome !== "ok") probeFailure = `quint run ${run.outcome}: ${run.reason}`;
+  const unwitnessed: typeof witnesses = [];
   for (const w of witnesses) {
     if (probeFailure !== undefined) continue;
     const count = new RegExp(`${w.name} was witnessed in (\\d+) trace`).exec(run.stdout)?.[1];
-    w.scenario.falsifiable = count !== undefined && Number(count) > 0;
+    if (count !== undefined && Number(count) > 0) w.scenario.falsifiable = true;
+    else if (quint.verify === "off") w.scenario.falsifiable = false;
+    else unwitnessed.push(w);
+  }
+  // No sample made these false, which proves nothing: the model checker decides, over every state within its bound, whether some input makes each false.
+  if (unwitnessed.length > 0) {
+    const probePath = join(scratch, "probe.qnt");
+    writeFileSync(probePath, [`module conform_probe {`, `  import ${model.module}.* from "${importPath(probePath, model.file)}"`, ...unwitnessed.map((w) => `  val ${w.name} = not(${w.expression})`), `}`].join("\n") + "\n");
+    for (const w of unwitnessed) {
+      const checked = await verify(probePath, w.name, quint, { ...options, main: "conform_probe" });
+      if (checked.outcome === "violation") w.scenario.falsifiable = true;
+      else if (checked.outcome === "ok") w.scenario.falsifiable = false;
+      else w.scenario.unproven = `quint verify ${checked.outcome}: ${checked.reason}`;
+    }
   }
   const acknowledged = new Map(conformance.acknowledged.map((a) => [a.guard, a.because]));
   for (const s of scenarios) {
@@ -196,11 +232,6 @@ export async function coverage(traces: readonly CapturedTrace[], results: readon
   const reachable = new Map(simulated.filter((f) => f.length > 0).map((f) => [key(f), f]));
   const logged = new Set(traces.flatMap((t) => t.events.flatMap((e) => conformance.names[e.action] ?? [e.action])));
   const uninstrumented = model.actions.filter((a) => !logged.has(a.name)).map((a) => a.name);
-  const blind = [...reachable.entries()]
-    .filter(([k]) => !covered.has(k))
-    .map(([, family]) => ({
-      family,
-      cause: uninstrumented.length > 0 ? `not instrumented: no trace logs an event that resolves to ${uninstrumented.join(", ")}` : "a genuine gap: every action is logged somewhere, and no test reaches this order; check the test command is not scoped narrowly before writing a test",
-    }));
+  const blind = [...reachable.entries()].filter(([k]) => !covered.has(k)).map(([, family]) => ({ family, cause: blindCause(testCommand, uninstrumented) }));
   return { landmarks, scenarios, blind, families: { covered: covered.size, simulated: reachable.size }, probe, ...(probeFailure === undefined ? {} : { probeFailure }) };
 }

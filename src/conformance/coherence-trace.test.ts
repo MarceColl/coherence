@@ -2,11 +2,12 @@
  * The trace client and its node:test hooks: inert without the collector's
  * URL, a value copied without calling into it, and a real node:test run under
  * a collector, where a passing test's events (its own and a child process's)
- * arrive in order and a failing test's are discarded.
+ * arrive in order and a failing test's are discarded, and where tests run at
+ * once in one process never take each other's events or outcomes.
  */
 
 import assert from "node:assert/strict";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
@@ -109,6 +110,49 @@ test("fails after logging", () => {
     const plain = await node(["--test", "--test-name-pattern=creates", "orders.test.ts"], { ...CLEAN, NODE_OPTIONS: `--import=${HOOKS}` }, dir);
     assert.equal(plain.code, 0, plain.out);
     assert.deepEqual(collector.drain(), [], "nothing reaches the collector without the URL");
+  } finally {
+    await collector.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("tests that run at once in one process never take each other's events or outcomes: what is logged while both run is counted unattributed, and each declares its own outcome", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "coherence-trace-concurrent-"));
+  const collector = await startCollector();
+  try {
+    writeFileSync(
+      join(dir, "pair.test.ts"),
+      `import { test } from "node:test";
+import { setTimeout as sleep } from "node:timers/promises";
+import { log } from ${JSON.stringify(CLIENT)};
+test("pair", { concurrency: true }, async (t) => {
+  await Promise.all([
+    t.test("first", async () => {
+      log("create", { id: "a1" }, { scopes: ["orders"] });
+      await sleep(20);
+      log("move", { id: "a2" }, { scopes: ["orders"] });
+    }),
+    t.test("second", async () => {
+      await sleep(5);
+      log("create", { id: "b1" }, { scopes: ["orders"] });
+      await sleep(60);
+      log("move", { id: "b2" }, { scopes: ["orders"] });
+      if (process.env.COHERENCE_TRACE_URL) throw new Error("fails under the collector only");
+    }),
+  ]);
+});
+`,
+    );
+    const counters = join(dir, "counters");
+    await node(["--test", "pair.test.ts"], { ...CLEAN, COHERENCE_TRACE_URL: collector.url, COHERENCE_TRACE_COUNTERS: counters, NODE_OPTIONS: `--import=${HOOKS}` }, dir);
+    const traces = collector.drain();
+    for (const trace of traces) {
+      const own = trace.test.endsWith("first") ? "a" : trace.test.endsWith("second") ? "b" : "";
+      for (const event of trace.events) assert.ok(String((event.arguments[0]?.value as string | undefined) ?? "").startsWith(own) && own !== "", `${trace.test} holds ${JSON.stringify(event.arguments)}, another test's event`);
+    }
+    assert.ok(!traces.some((t) => t.test.endsWith("second")), "the failing test's outcome is its own: its trace is discarded, never the passing one's");
+    const unattributed = readdirSync(counters).reduce((sum, name) => sum + (JSON.parse(readFileSync(join(counters, name), "utf8")) as { unattributed: number }).unattributed, 0);
+    assert.ok(unattributed > 0, "an event logged while both ran belongs to neither, and is counted");
   } finally {
     await collector.close();
     rmSync(dir, { recursive: true, force: true });

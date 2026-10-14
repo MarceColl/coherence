@@ -7,7 +7,10 @@
  *              committed, written whole (aside, then renamed) or not at all.
  *   verdicts   .coherence/conformance/<session>.jsonl, a record store: one line
  *              per model per conform, appended, never rewritten, committed with
- *              the other records. A quint prop reads its model's latest one.
+ *              the other records. A quint prop reads its model's latest one
+ *              whose capture and replay hashes are the current ones
+ *              (standing.ts); a verdict of other hashes is stale, never
+ *              current, however recently it agreed.
  *
  * Only this module writes either.
  */
@@ -133,9 +136,4 @@ export function loadVerdicts(root: string): ConformanceVerdict[] {
     }
   }
   return verdicts.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
-}
-
-/** The latest verdict for a model's component folder, or undefined when conform never ran on it. */
-export function latestVerdict(root: string, folder: string): ConformanceVerdict | undefined {
-  return loadVerdicts(root).filter((v) => v.model === folder).pop();
 }

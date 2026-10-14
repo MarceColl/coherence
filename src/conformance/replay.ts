@@ -21,7 +21,10 @@
  * Two quint runs answer each trace. The first, the ghost run, records every
  * guard's value and every landmark at every state in variables of its own and
  * never fails, so a failing trace is read to its first failing step with the
- * guards that were false. The second runs the matched traces again through
+ * guards that were false. Where a step had several enabled candidates (a
+ * searched parameter), the ghost fired one; when the trace then fails, it is
+ * run again with each other enabled choice at each earlier step, within
+ * perRun runs, and it matches when any run of choices replays every step. The second runs the matched traces again through
  * the model's own actions with the arguments the first chose, and must pass:
  * a guard the reading missed would make the model refuse what the ghost
  * allowed, and that disagreement fails the trace rather than passing it.
@@ -227,18 +230,26 @@ function importPath(from: string, to: string): string {
   return rel.startsWith(".") ? rel : `./${rel}`;
 }
 
-/** The generated module's text: the ghost run of each planned trace, every guard and landmark recorded, never failing. */
-export function ghostModule(path: string, model: ReadModel, traces: readonly { index: number; steps: PlannedStep[] }[]): string {
+/**
+ * The generated module's text: the ghost run of each planned trace, every
+ * guard and landmark recorded, never failing. A step fires its first enabled
+ * candidate, or the one `prefer` names for it (by step, the candidate's
+ * place) when that one is enabled: how replay tries another choice at a step
+ * where several were enabled.
+ */
+export function ghostModule(path: string, model: ReadModel, traces: readonly { index: number | string; steps: PlannedStep[]; prefer?: ReadonlyMap<number, number> }[]): string {
   const stutter = model.vars.map((v) => `${v.name}' = ${v.name}`);
   const marks = `[${[STUTTER_SENTINEL, ...model.landmarks].join(", ")}]`;
   const lines = [`module conform_replay {`, `  import ${model.module}.* from "${importPath(path, model.file)}"`, `  var conform_guards: List[List[List[bool]]]`, `  var conform_marks: List[List[bool]]`, `  action conform_init = all { init, conform_guards' = [], conform_marks' = [] }`];
-  for (const { index, steps } of traces) {
+  for (const { index, steps, prefer } of traces) {
     const names: string[] = [];
     for (const step of steps) {
       const name = `conform_t${index}_s${step.step}`;
       names.push(name);
       const values = step.candidates.map((c) => bound(c, `[${[STUTTER_SENTINEL, ...c.action.guards.map((g) => guardValue(c, g))].join(", ")}]`));
-      const chosen = step.rejected ? "" : step.candidates.map((c) => `if (${bound(c, conjunction(c.action.guards))}) ${call(c)} else `).join("");
+      const first = prefer?.get(step.step);
+      const order = first === undefined ? step.candidates : [step.candidates[first]!, ...step.candidates.filter((_, k) => k !== first)];
+      const chosen = step.rejected ? "" : order.map((c) => `if (${bound(c, conjunction(c.action.guards))}) ${call(c)} else `).join("");
       const move = `${chosen}all { ${stutter.join(", ")} }`;
       lines.push(`  action ${name} = all {`, `    conform_marks' = conform_marks.append(${marks}),`, `    conform_guards' = conform_guards.append([${values.join(", ")}]),`, `    ${move},`, `  }`);
     }
@@ -330,41 +341,20 @@ export async function replay(traces: readonly CapturedTrace[], model: ReadModel,
   }
 
   const planned = traces.map((trace, index) => ({ index, trace, steps: planTrace(trace, model, conformance, domains) }));
-  const ghostable = planned.filter((p) => p.steps.length > 0 && p.steps.every((s) => s.failure === undefined));
-  const ghostPath = join(scratch, "ghost.qnt");
-  writeFileSync(ghostPath, ghostModule(ghostPath, model, ghostable));
-  const itfDir = join(scratch, "itf-ghost");
-  rmSync(itfDir, { recursive: true, force: true });
-  mkdirSync(itfDir, { recursive: true });
-  const ghost = ghostable.length === 0 ? undefined : await quintTest(ghostPath, "^conform_ghost_", quint, { ...options, main: "conform_replay", itf: join(itfDir, "itf_{test}_{seq}.itf.json") });
-  if (ghost !== undefined && (ghost.outcome === "error" || ghost.outcome === "unavailable" || ghost.outcome === "timeout")) return { ...unreplayable(`quint ${ghost.outcome === "error" ? "refused the generated replay module" : ghost.outcome === "timeout" ? "did not finish the replay" : "is unavailable"}: ${ghost.reason}`), module: ghostPath };
-  const ghostReport = testReport(ghost?.json);
-  const states = lastStates(itfDir);
-
   const results: TraceResult[] = [];
   const confirm: { index: number; steps: { candidate: Candidate; rejected: boolean }[] }[] = [];
-  for (const { index, trace, steps } of planned) {
-    const result: TraceResult = { test: trace.test, matched: true, steps: [], family: [], guardsSeen: [], arguments: pinningOf(trace, model, conformance) };
-    results.push(result);
+  /** One ghost run read step by step into a trace result, with the steps before its first failure where another enabled candidate of the same action could have been chosen. */
+  const readGhost = (base: TraceResult, steps: readonly PlannedStep[], prefer: ReadonlyMap<number, number>, state: Record<string, unknown>): { result: TraceResult; chosen: { candidate: Candidate; rejected: boolean }[]; branches: { step: number; alternatives: number[] }[] } => {
+    const result: TraceResult = { ...base, matched: true, steps: [], family: [], guardsSeen: [] };
     const fail = (step: number, cause: string): void => {
       result.matched = false;
       result.failedAt ??= step;
       result.cause ??= cause;
     };
-    const planning = steps.find((s) => s.failure !== undefined);
-    if (planning !== undefined || steps.length === 0) {
-      for (const s of steps) result.steps.push({ step: s.step, logged: s.event.action, outcome: "unresolved", pinned: [], searched: [], falseGuards: [], writes: [], ...(s.failure === undefined ? {} : { cause: s.failure }) });
-      fail(planning?.step ?? 1, planning?.failure ?? "the trace holds no event");
-      continue;
-    }
-    const state = states.get(`conform_ghost_${index}`);
-    if (state === undefined || ghostReport?.failed.includes(`conform_ghost_${index}`) === true) {
-      fail(1, `quint could not evaluate the trace through the model (a guard or an update raised an error on the logged values): run quint test ${relative(scratch, ghostPath)} --main conform_replay --match conform_ghost_${index}`);
-      continue;
-    }
     const guards = fromItf(state["conform_guards"]) as boolean[][][];
     const marks = fromItf(state["conform_marks"]) as boolean[][];
     const chosen: { candidate: Candidate; rejected: boolean }[] = [];
+    const branches: { step: number; alternatives: number[] }[] = [];
     for (const [i, step] of steps.entries()) {
       const values = (guards[i] ?? []).map((v) => v.slice(1));
       const allowed = step.candidates.map((c, k) => attemptGuards(c.action).every((g) => values[k]?.[g.index - 1] === true));
@@ -396,13 +386,16 @@ export async function replay(traces: readonly CapturedTrace[], model: ReadModel,
         break;
       }
       const actionsFiring = new Set(firing.map((k) => step.candidates[k]!.action.name));
-      const k = firing[0]!;
+      // The ghost fired the preferred candidate when it was enabled, else the first enabled one.
+      const preferred = prefer.get(step.step);
+      const k = preferred !== undefined && firing.includes(preferred) ? preferred : firing[0]!;
       const candidate = step.candidates[k]!;
       if (actionsFiring.size > 1) {
         result.steps.push({ step: step.step, logged: step.event.action, action: candidate.action.name, outcome: "unresolved", pinned: candidate.pinned, searched: candidate.searched, falseGuards: [], writes: [], cause: `ambiguous: ${[...actionsFiring].join(", ")} all fire` });
         fail(step.step, `step ${step.step}: ${step.event.action} is ambiguous: ${[...actionsFiring].join(", ")} all fire; pin an argument that tells them apart, or narrow the name map`);
         break;
       }
+      if (firing.length > 1) branches.push({ step: step.step, alternatives: firing.filter((other) => other !== k) });
       for (const g of candidate.action.guards.filter((g) => g.fact === undefined)) result.guardsSeen.push({ action: candidate.action.name, index: g.index, value: true });
       result.steps.push({ step: step.step, logged: step.event.action, action: candidate.action.name, outcome: "fired", pinned: candidate.pinned, searched: candidate.searched.map((s) => ({ ...s, tried: step.candidates.filter((c) => c.action === candidate.action).length })), falseGuards: [], writes: candidate.action.writes });
       chosen.push({ candidate, rejected: false });
@@ -412,7 +405,70 @@ export async function replay(traces: readonly CapturedTrace[], model: ReadModel,
       const name = model.landmarks[i]!;
       if (held && !result.family.includes(name)) result.family.push(name);
     });
+    return { result, chosen, branches: branches.filter((b) => result.matched || b.step < result.failedAt!) };
+  };
+
+  // Each trace is searched over the choices its enabled candidates leave open: the first enabled one at every step, then, while it fails, another enabled one at a step before the failure, one round of ghost runs per depth, at most perRun runs per trace. A trace matches when some run of choices replays every step.
+  type Attempt = { index: number; steps: PlannedStep[]; prefer: Map<number, number>; after: number };
+  let round: Attempt[] = [];
+  const tried = new Map<number, number>();
+  const stopped = new Set<number>();
+  for (const { index, trace, steps } of planned) {
+    const result: TraceResult = { test: trace.test, matched: false, steps: [], family: [], guardsSeen: [], arguments: pinningOf(trace, model, conformance) };
+    results.push(result);
+    const planning = steps.find((s) => s.failure !== undefined);
+    if (planning !== undefined || steps.length === 0) {
+      for (const s of steps) result.steps.push({ step: s.step, logged: s.event.action, outcome: "unresolved", pinned: [], searched: [], falseGuards: [], writes: [], ...(s.failure === undefined ? {} : { cause: s.failure }) });
+      result.failedAt = planning?.step ?? 1;
+      result.cause = planning?.failure ?? "the trace holds no event";
+      continue;
+    }
+    round.push({ index, steps, prefer: new Map(), after: 0 });
+    tried.set(index, 1);
+  }
+  const ghostPath = join(scratch, "ghost.qnt");
+  const best = new Map<number, { result: TraceResult; chosen: { candidate: Candidate; rejected: boolean }[] }>();
+  for (let pass = 0; round.length > 0; pass += 1) {
+    const path = pass === 0 ? ghostPath : join(scratch, `ghost-${pass}.qnt`);
+    const named = round.map((attempt, n) => ({ ...attempt, id: pass === 0 ? String(attempt.index) : `${attempt.index}_${pass}_${n}` }));
+    writeFileSync(path, ghostModule(path, model, named.map((a) => ({ index: a.id, steps: a.steps, prefer: a.prefer }))));
+    const itfDir = join(scratch, pass === 0 ? "itf-ghost" : `itf-ghost-${pass}`);
+    rmSync(itfDir, { recursive: true, force: true });
+    mkdirSync(itfDir, { recursive: true });
+    const ghost = await quintTest(path, "^conform_ghost_", quint, { ...options, main: "conform_replay", itf: join(itfDir, "itf_{test}_{seq}.itf.json") });
+    if (ghost.outcome === "error" || ghost.outcome === "unavailable" || ghost.outcome === "timeout") return { ...unreplayable(`quint ${ghost.outcome === "error" ? "refused the generated replay module" : ghost.outcome === "timeout" ? "did not finish the replay" : "is unavailable"}: ${ghost.reason}`), module: path };
+    const ghostReport = testReport(ghost.json);
+    const states = lastStates(itfDir);
+    const next: Attempt[] = [];
+    for (const attempt of named) {
+      if (best.get(attempt.index)?.result.matched === true) continue;
+      const base = results[attempt.index]!;
+      const state = states.get(`conform_ghost_${attempt.id}`);
+      if (state === undefined || ghostReport?.failed.includes(`conform_ghost_${attempt.id}`) === true) {
+        if (!best.has(attempt.index)) best.set(attempt.index, { result: { ...base, matched: false, failedAt: 1, cause: `quint could not evaluate the trace through the model (a guard or an update raised an error on the logged values): run quint test ${relative(scratch, path)} --main conform_replay --match conform_ghost_${attempt.id}` }, chosen: [] });
+        continue;
+      }
+      const read = readGhost(base, attempt.steps, attempt.prefer, state);
+      const held = best.get(attempt.index);
+      // A trace that matches no run of choices reports the run that got furthest, the first such run on a tie.
+      if (held === undefined || read.result.matched || (read.result.failedAt ?? 0) > (held.result.failedAt ?? 0)) best.set(attempt.index, read);
+      if (read.result.matched) continue;
+      for (const branch of read.branches.filter((b) => b.step > attempt.after))
+        for (const alternative of branch.alternatives) {
+          if (tried.get(attempt.index)! >= conformance.search.perRun) {
+            stopped.add(attempt.index);
+            continue;
+          }
+          tried.set(attempt.index, tried.get(attempt.index)! + 1);
+          next.push({ index: attempt.index, steps: attempt.steps, prefer: new Map([...attempt.prefer, [branch.step, alternative]]), after: branch.step });
+        }
+    }
+    round = next.filter((attempt) => best.get(attempt.index)?.result.matched !== true);
+  }
+  for (const [index, { result, chosen }] of best) {
+    results[index] = result;
     if (result.matched) confirm.push({ index, steps: chosen });
+    else if (stopped.has(index)) result.cause = `${result.cause ?? "unmatched"}; search bound: the other choices at earlier steps were tried up to perRun ${conformance.search.perRun} runs, and more remain`;
   }
 
   // The matched traces again, through the model's own actions: what the ghost run allowed, the model must allow.
