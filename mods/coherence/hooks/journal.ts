@@ -197,7 +197,7 @@ export function sessionOf(prefix: string, names: readonly string[]): string | un
 // never dropped unsaid.
 
 /** The extensions a record store's file carries: a packed store's joins this list. */
-export const RECORD_FILE_EXTENSIONS: readonly string[] = ['.jsonl']
+export const RECORD_FILE_EXTENSIONS: readonly string[] = ['.jsonl', '.jsonseq']
 /** What ends a record: a line, or the packed form's record separator. */
 const RECORD_END = /[\n\u001e]/
 /** The most one `$.fs.read` copies; a file past it is read from its offset through `tail`. */
