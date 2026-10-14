@@ -399,6 +399,8 @@ test("work orders: create, move, close, owner, inspect; terminal orders do not m
     assert.equal(run("work", "move", id, "done", "--because", "b", ...WHO).code, 1, "an unknown state is refused");
     assert.equal(run("work", "move", id, "completed", "--because", "b", ...WHO).code, 1, "completed is what close records");
     assert.equal(run("work", "move", "w-00000000", "active", "--because", "b", ...WHO).code, 1, "an unknown order is refused");
+    assert.equal(run("work", "close", "w-00000000", "--because", "b", ...WHO).code, 1, "an unknown order does not close");
+    assert.equal(run("work", "owner", "w-00000000", "--owner-session", "s9", "--because", "b", ...WHO).code, 1, "an unknown order changes no owner");
     const activated = run("work", "move", id, "active", "--because", "taking it up", ...WHO);
     assert.equal(activated.code, 0, activated.err.join("\n"));
     assert.match(activated.out[0] ?? "", /^wm-[0-9a-f]{8}  w-[0-9a-f]{8} open -> active/);

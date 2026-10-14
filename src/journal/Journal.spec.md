@@ -268,4 +268,5 @@ model: Journal.qnt
   because: an ended order that moved again would reopen work its owner closed and rebind runs to it; the verbs refuse it one by one, and the model states it once over every sequence of verbs
   crossing: project-source -> record
   refuted: dropped the isLive guard from move in Journal.qnt -> quint run found a state that breaks terminalNeverMoves; restored from HEAD, verified again (2026-10-14)
+  refuted: removed refuseTerminal from work move in workVerbs.ts under conformance.required -> conform disagreed (the test that moves a completed order failed and its trace was discarded) and the quint prop went red on it; restored (cmp), conform agreed again and the prop verified (2026-10-14)
   kinds: none
