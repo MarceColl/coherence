@@ -148,9 +148,12 @@ function appends(): Record<string, unknown> {
 // ---------------------------------------------------------------- landing on GitHub's terms
 
 /** Land `head` on `base` in a scratch clone with no attributes in force; the conflicted paths per method. */
-function landings(base: string, head: string): Record<string, string[]> {
+function landings(baseRev: string, headRev: string): Record<string, string[]> {
+  // Each named as this checkout names it, then fetched whole into the clone: a clone's origin/main is this checkout's main.
+  const [base, head] = [baseRev, headRev].map((rev) => must(REPO, ["rev-parse", "--verify", `${rev}^{commit}`]).trim()) as [string, string];
   const clone = join(WORK, "clone");
   must(WORK, ["clone", "-q", "--no-checkout", REPO, clone]);
+  must(clone, ["fetch", "-q", "origin", "+refs/remotes/*:refs/remotes/source/*", "+HEAD:refs/heads/source-head"]);
   const noAttributes = ["-c", `attr.tree=${EMPTY_TREE}`];
   const out: Record<string, string[]> = {};
   for (const method of ["merge", "squash", "rebase"] as const) {
