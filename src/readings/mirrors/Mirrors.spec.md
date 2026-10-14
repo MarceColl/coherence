@@ -36,3 +36,10 @@ The mirror reading: the lists a project keeps by hand that must mirror something
   because: d-f1ff87d6: the edit-time alarm watches declared pairs, and this reading is how a pair is found; the declaration format belongs to the alarm, so the reading proposes in one plain shape and declares nothing itself
   refuted: made recipeOf name a folder universe as a literal at its line, so a list against its folder was proposed -> the totality oracle went red; restored, green (2026-10-12)
   kinds: none
+- unread languages are said: The mirror reading counts by extension the tracked files at its revision in a language it does not parse, query mirrors says them beside its counts and in its JSON, the kept reading carries them, and orient names them in one advisory line labeled with the commit and time it read when they outnumber the code files it parsed; a reading kept before the counts existed is treated as none.
+  over: a fixture repository of Python files and one TypeScript file, read and kept through query mirrors, a kept reading of mostly TypeScript with two Python files, and a kept reading of the earlier version
+  via: files in a language the reading does not parse are counted by extension, said by query mirrors, and named at orient only when they outnumber the code it read
+  because: df-2932838a: on PostHog's Python folder the reading ran 5.4 s, read 0 sets and orient said nothing, so the project never learned its code went unread; no silent skips. Orient speaks only when the unread outnumber the parsed, so Coherence's own start, 14 such files beside 294, stays quiet
+  crossing: project-source -> reading
+  refuted: made readMirrors never count a file in a language it does not parse, so unread stayed empty -> the totality oracle went red; restored, green (2026-10-14)
+  kinds: none
