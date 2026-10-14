@@ -60,6 +60,18 @@ jobs:
           path: ~/.quint
           key: quint-0.33.0-${{ runner.os }}
 
+      # Quint's download is not safe to run twice at once: the tests start quint in parallel, and on a cold cache they race to write the same archive. One run first fetches it.
+      - name: Quint evaluator download
+        run: |
+          cat > "$RUNNER_TEMP/warm.qnt" <<'QNT'
+          module warm {
+            var n: int
+            action init = n' = 0
+            action step = n' = n + 1
+          }
+          QNT
+          quint run "$RUNNER_TEMP/warm.qnt" --max-samples 1 --max-steps 1
+
       # The Python test runner and tach, into .venv, where the tests look for them.
       - name: Python test tools
         run: npm run test:setup
@@ -111,6 +123,18 @@ jobs:
         with:
           path: ~/.quint
           key: quint-0.33.0-${{ runner.os }}
+
+      # Quint's download is not safe to run twice at once: the tests start quint in parallel, and on a cold cache they race to write the same archive. One run first fetches it.
+      - name: Quint evaluator download
+        run: |
+          cat > "$RUNNER_TEMP/warm.qnt" <<'QNT'
+          module warm {
+            var n: int
+            action init = n' = 0
+            action step = n' = n + 1
+          }
+          QNT
+          quint run "$RUNNER_TEMP/warm.qnt" --max-samples 1 --max-steps 1
 
       # The Python test runner and tach, into .venv, where the tests look for them.
       - name: Python test tools
