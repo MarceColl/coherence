@@ -1,6 +1,7 @@
 # Observation
 
 Runtime behavior recorded as a separate, labeled layer of evidence: per-test coverage captured from the batched totality pass's one runner invocation, mapped to components and component interfaces, appended as observations bound to commit, session, and source, and read back fresh or stale.
+model: none — a capture of what code a test ran, with no rules of its own for how a state changes
 
 ## invariants
 - stale never current: An observation whose commit is not the head, or whose tree was dirty when it was captured, is read as stale by every reader, and never as current.

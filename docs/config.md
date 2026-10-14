@@ -96,7 +96,7 @@ To opt in several folders and state their shared settings once, put a
 
   | Key | Rule |
   |---|---|
-  | `name`, `entryDir`, `lexicon`, `projects` | Never inherited. Each belongs to the leaf. |
+  | `name`, `entryDir`, `lexicon`, `projects`, `models` | Never inherited. Each belongs to the leaf. |
   | `ignore` | Combined. A folder name from the registry applies anywhere. A path from the registry is kept only if it lies inside the leaf, and is rewritten relative to it. |
   | `wellKnown` | Combined. |
   | `tests`, `test`, `testJson`, `testMatch`, `testFilterForm`, `testDir`, `testDirs` | One group. A leaf that sets any of them replaces the registry's whole group. An inherited setup's `cwd` is rewritten from the registry's folder to the leaf, so the registry's `"cwd": "."` runs the tests from the repository root. A setup without `cwd` runs in the leaf. |
@@ -139,6 +139,7 @@ yet. For now, every leaf keeps its own `lexicon.json`.
 | `interfaceBudget` | `{ "seconds": 600, "memoryMB": 12288 }` | The most time and memory the Structure reading's interface pass may take; when it runs out, the reading says it is partial. |
 | `telemetry` | none | `false` refuses fleet telemetry for this project, whatever each user chose with `coherence telemetry on`; a registry's `false` refuses for every leaf. Telemetry is off unless a user opts in; see the README's [Telemetry](../README.md#telemetry) section for what is sent. |
 | `latencyBudget` | `3` | The latency budget: the most seconds a tool hook (PreToolUse, PostToolUse) may take, counted from its process's start. A tool hook over it says so in its own answer; regulate names the session's calls over it, and orient the last week's. These hooks run around every tool call, and a call cycle that feels sluggish is how a hook gets switched off. |
+| `models` | none | `true` (or `{ "required": true }`) asks every spec for its `model:` line: the quint model beside it, or `none` or `planned` with the reason. A spec with no line is then a problem. Unset, a project that names a model anywhere hears which specs name none, as an advisory. See [spec.md](spec.md#the-model-line). |
 
 ## Tests: how a totality oracle is run
 

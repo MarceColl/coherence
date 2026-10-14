@@ -1,6 +1,7 @@
 # Spec
 
 The spec grammar and the model: one bullet shape, with each bullet's state derived from what it carries and from the latest run.
+model: none — deriveState is a pure classifier of a bullet and its latest run, pinned case by case in spec.test.ts and floor.test.ts
 
 ## invariants
 - retired sections refused: A section the reference used is refused by name with its replacement, and any other section is refused as unknown.
@@ -253,4 +254,10 @@ The spec grammar and the model: one bullet shape, with each bullet's state deriv
   via: a family's guard answers only for its own defect, so a later defect in the family is no guard failure, while a class keeps the rule
   because: audience covers every message and every piece of guidance, so the guard of its first guarded defect (the CI offer) stood for the whole class and turned two unrelated wording defects into guard failures (c-5c824314); the owner chose broad classes over splitting audience into single-member classes (d-a02fd009)
   refuted: let a family's witnessed guard stand for the family, as a class's does -> "a family's guard answers only for its own defect, so a later defect in the family is no guard failure, while a class keeps the rule" went red in src/journal/defects.test.ts; restored (cmp), green (2026-10-09)
+  kinds: none
+- a spec names its model or says why not: A spec's model: line names a .qnt file that exists beside it, or says none or planned with its reason; a malformed, empty or doubled line is a problem, and where the config sets models a spec with no line is a problem, while a project that never sets it hears at most an advisory.
+  over: every spec in a project with models set, the three values of the line, each malformed form, a file that is missing or climbs out of the component, and the valid adopter inputs: a project that names no model, and one that names some without requiring the line
+  via: a spec names its quint model or says why not: a .qnt file, or none or planned with its reason; a missing line is a problem only where the config requires it
+  because: a spec with no model and no reason leaves "a model makes no sense here" and "nobody wrote one" indistinguishable; the line makes the choice explicit and checkable, and a project that never opted in is never failed for a line it was never asked for
+  crossing: project-source -> reading
   kinds: none

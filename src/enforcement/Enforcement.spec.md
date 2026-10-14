@@ -1,6 +1,7 @@
 # Enforcement
 
 Enforcement by detection: the chokepoint check with its grade ladder and automatic refutation, the totality oracle pass, the run as the primary record, and the warm server, with its authenticated socket and its guarded HTTP for the live Scope reading.
+model: planned — refutation witnessing (recorded, then witnessed by a later pass) and the warm server's lock and idle lifecycle
 
 ## invariants
 - run appended never rewritten: A run is appended as one line and never rewritten; the latest verdict per enforcement is a view derived from every run, and a skipped enforcement keeps its prior dated verdict.

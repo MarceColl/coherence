@@ -1,6 +1,7 @@
 # Scope
 
 The reading: one surface projecting the model for a human, in seven views: Structure, Lexicon, Components, Invariants, Practices, Runs, Journal; a fixed shell that loads its state from the warm server and follows the stores live, or carries one state as a snapshot file; and the agent query, the same state as plain text.
+model: none — a reading that renders the model and holds no state
 
 ## entrances
 - scope: a human opens the live reading from the root's warm server, or an agent writes a snapshot of this project or another root

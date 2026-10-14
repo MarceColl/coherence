@@ -8,7 +8,7 @@
  * repository is outside every project. A leaf inherits the registry's keys
  * unless its own config declares them, key by key:
  *
- *   name, entryDir, lexicon, projects   never inherited: each is the leaf's own
+ *   name, entryDir, lexicon, projects, models   never inherited: each is the leaf's own
  *   ignore      concatenated: the registry's names apply anywhere, and a path
  *               it names is kept when it lies inside the leaf, rebased to it
  *   wellKnown   concatenated
@@ -57,7 +57,7 @@ export interface Registry {
 }
 
 /** The keys a leaf never inherits. */
-export const OWN_KEYS: ReadonlySet<string> = new Set(["name", "entryDir", "lexicon", "projects"]);
+export const OWN_KEYS: ReadonlySet<string> = new Set(["name", "entryDir", "lexicon", "projects", "models"]);
 /** The keys a leaf's own value adds to the registry's rather than replaces. */
 export const CONCATENATED: ReadonlySet<string> = new Set(["ignore", "wellKnown"]);
 /** The keys one test setup reads, top level or in each entry of tests; enforcement/config.ts reads a setup through these alone, so a key it reads is one this names. */

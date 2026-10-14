@@ -1,6 +1,7 @@
 # Coherence
 
 A prosthetic for proprioception: specs, invariants, and the readings that keep an agent session balanced.
+model: none — the entry spec declares trust levels and the crossings between them; it owns no state that changes
 
 ## trust levels
 - project-source: Agent-authored text: the adopter's code, specs, docs, and what an agent passes the command line. Never trusted about itself; every claim in it is checked against the code, never taken from it.

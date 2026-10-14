@@ -744,7 +744,7 @@
     {
       "name": "run",
       "status": "settled",
-      "definition": "The primary record of one verification pass: which invariants were checked, the verdict for each enforcement, the session that ran it (and so the work order it binds to), and the commit. The chokepoint pass runs at the edit; the oracle pass runs at the next practical moment. The latest verdict per invariant is a view derived from runs, never stored as its own truth; a skipped enforcement keeps its prior dated verdict in the view.",
+      "definition": "The primary record of one verification pass. It names which invariants were checked, the verdict for each enforcement, the session that ran it (and so the work order it binds to), and the commit. The chokepoint pass runs at the edit; the oracle pass runs at the next practical moment. The latest verdict per invariant is a view derived from runs, never stored as its own truth; a skipped enforcement keeps its prior dated verdict in the view.",
       "rejected": [
         {
           "alternative": "tiers (fast skips oracles, full runs them)",
@@ -784,7 +784,7 @@
     {
       "name": "scope",
       "status": "settled",
-      "definition": "The reading. One surface projecting the model (components, invariants with enforcement, grade, crossing, refutation and because, references, reliance, runs, journal records, work orders) for a human, in views. A fixed shell loads the state from the warm server and follows the stores as they change; a snapshot carries one state whole in a file. Replaces every other render.",
+      "definition": "The reading. One surface projecting the model for a human, in views. It shows components, invariants with enforcement, grade, crossing, refutation and because, references, reliance, runs, journal records and work orders. A fixed shell loads the state from the warm server and follows the stores as they change; a snapshot carries one state whole in a file. Replaces every other render.",
       "rejected": [
         {
           "alternative": "panel (live TUI)",
@@ -926,7 +926,7 @@
     {
       "name": "orient",
       "status": "settled",
-      "definition": "The start-of-cycle reading. Before acting, the session sees where the project stands and what heading follows from it: escalations awaiting a human, structural defects, requirements stuck short of invariant, unreached mass, the session's own work order, and what peers recorded. One heading, derived from state; it also names the spec gaps beyond the adoption baseline.",
+      "definition": "The start-of-cycle reading. Before acting, the session sees where the project stands and what heading follows from it. It shows escalations awaiting a human, structural defects, requirements stuck short of invariant, unreached mass, the session's own work order, and what peers recorded. One heading, derived from state; it also names the spec gaps beyond the adoption baseline.",
       "rejected": [
         {
           "alternative": "orient and regulate as two competing machines over the same ledgers",
@@ -1102,7 +1102,7 @@
     {
       "name": "peer feed",
       "status": "settled",
-      "definition": "The simpler signaling channel for subagents: before each tool use, the hook injects the subjects of decisions peers have recorded since the last injection, not their full text. Delta-tracked per session. An agent that wants the full record reads the journal.",
+      "definition": "The simpler signaling channel for subagents. Before each tool use, the hook injects the subjects of decisions peers have recorded since the last injection, not their full text. Delta-tracked per session. An agent that wants the full record reads the journal.",
       "rejected": [
         {
           "alternative": "full records with previews, truncation, escaped fragments, and a pending queue at every boundary",
@@ -1512,6 +1512,38 @@
         "defined_by": "agent proposal, 2026-10-09 (session aba22a9624563d104), for an adopter's request that Coherence offer to run itself on pull requests with the mode presented to the user (df-7b885044, d-d0d83f59)",
         "because": "ci install, ci report, the hooks install offer and the adoption step need one name for what runs on a pull request"
       }
+    },
+    {
+      "name": "quint model",
+      "definition": "The .qnt model a spec names on its model: line. It writes the component's behavior as guarded actions over pure updates, which a quint prop checks and conformance replay holds against the code; a spec with no model says none or planned, with the reason, on the same line."
+    },
+    {
+      "name": "quint prop",
+      "definition": "A totality oracle whose detector is quint. Its via: reads quint prop <property>, a property of the spec's quint model, checked by quint typecheck, quint run and quint verify, and graded verified or simulated; it never passes on a step that did not answer."
+    },
+    {
+      "name": "conformance replay",
+      "definition": "The code's own tests replayed through its quint model. Each instrumented site logs an event to a collector while the tests run, and every captured trace replays through the model with arguments pinned by name and conformance facts guarding the state it computes; green only when every trace replays and coverage holds."
+    },
+    {
+      "name": "conformance fact",
+      "definition": "A logged post-state fact a model action guards on. The code logs it after a mutation as an extra argument named as the action's parameter, and the action guards it equal to its own computed post-state, so a replay that disagrees fails the guard; opt in per operation, and only as strong as the fact chosen."
+    },
+    {
+      "name": "collector",
+      "definition": "The loopback server the tests post events to. The conform command starts it before the tests; it takes one scoped event per POST /test/<name>, queues a test's trace when its outcome is ok, discards it when failed, and refuses a client that speaks another protocol version."
+    },
+    {
+      "name": "landmark",
+      "definition": "A model boolean naming a moment worth reaching. It is written val landmark_<name> in a quint model; a behavior family is the ordered sequence in which a trace's landmarks first fire, and every landmark must be reached by some test."
+    },
+    {
+      "name": "behavior family",
+      "definition": "The order in which a trace's landmarks first fire. The same landmarks in another order, [b, a] against [a, b], are a different family, so whether a test covered a behavior is decidable; a family the model can reach and no test covers is blind."
+    },
+    {
+      "name": "guard scenario",
+      "definition": "One guard conjunct of one model action. Replay records whether a step found it true and found it false; one that can be false and never was is a gap, and one no input can falsify must be widened or acknowledged with a reason."
     }
   ],
   "metaphors": {

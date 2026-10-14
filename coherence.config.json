@@ -4,6 +4,7 @@
   "ignore": ["node_modules", "promo", "src/readings/scope/fonts"],
   "language": "typescript",
   "wellKnown": ["Mnemion", "Sol"],
+  "models": true,
   "test": "node --disable-warning=ExperimentalWarning --import=./src/enforcement/leak-guard.ts --test --test-concurrency=1 --test-name-pattern={filter} 'src/**/*.test.ts'",
   "testMatch": "# pass [1-9][0-9]*",
   "testJson": [

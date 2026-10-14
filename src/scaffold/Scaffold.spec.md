@@ -1,6 +1,7 @@
 # Scaffold
 
 The command that makes the complete shape the cheapest thing to produce: a component with its intent, an invariant with every slot and its checklist.
+model: none — it writes spec text from templates, and its refusal to overwrite is example-tested
 
 ## invariants
 - every slot printed: A scaffolded invariant prints every slot its form takes as a placeholder (the entrances a totality oracle on a declared crossing covers among them, which a chokepoint form never names) and one checklist line per applicable shape, and nothing for a shape that does not apply.

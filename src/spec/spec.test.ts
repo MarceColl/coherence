@@ -555,3 +555,56 @@ test("the grammar: an entrance's control: none carries a non-empty reason and ne
   assert.deepEqual(both.problems.map((p) => `${p.line} ${p.message}`), ["9 entrance in names a guard: and control: none; a guard is a control, so keep one of them"]);
   assert.ok(entrance("  control: none — a\n  control: none — b\n").problems.some((p) => p.line === 9 && p.message === "entrance in names its control twice"));
 });
+
+test("a spec names its quint model or says why not: a .qnt file, or none or planned with its reason; a missing line is a problem only where the config requires it", () => {
+  const head = (line: string): string => `# Widgets\n\nThe widgets.\n${line}\n\n## invariants\n`;
+  // The grammar: each value read, and each malformed line refused with its line number.
+  assert.deepEqual(parseSpec(head("model: Widgets.qnt"), "X.spec.md", { seed }).model, { kind: "file", file: "Widgets.qnt", line: 4 });
+  assert.deepEqual(parseSpec(head("model: none — a reading with no state"), "X.spec.md", { seed }).model, { kind: "none", reason: "a reading with no state", line: 4 });
+  assert.deepEqual(parseSpec(head("model: planned -- the order lifecycle"), "X.spec.md", { seed }).model, { kind: "planned", what: "the order lifecycle", line: 4 });
+  for (const [line, wanted] of [
+    ["model: none", /model: none needs the reason a model makes no sense here/],
+    ["model: planned —", /model: planned needs what the model will describe/],
+    ["model:", /model: names nothing/],
+    ["model: Widgets.tla", /model: Widgets.tla is neither a .qnt file nor none or planned/],
+  ] as const) {
+    const parsed = parseSpec(head(line), "X.spec.md", { seed });
+    assert.equal(parsed.model, undefined, line);
+    assert.match(parsed.problems.map((p) => `${p.line} ${p.message}`).join("\n"), new RegExp(`^4 ${wanted.source}`), line);
+  }
+  const twice = parseSpec(head("model: A.qnt\nmodel: none — b"), "X.spec.md", { seed });
+  assert.ok(twice.problems.some((p) => p.line === 5 && /model: given twice/.test(p.message)));
+  assert.equal(parseSpec(head("model: <the model>"), "X.spec.md", { seed }).problems.length, 0, "a placeholder counts as absent");
+
+  // The model: a named file resolves beside the spec, nested components included; a missing one is a problem.
+  const nested = { "Widgets.spec.md": head("model: none — the entry spec"), "src/orders/Orders.spec.md": head("model: Orders.qnt"), "src/orders/Orders.qnt": "module Orders {}\n" };
+  withModel(nested, (model) => {
+    assert.deepEqual(model.problems, []);
+    const orders = model.components.find((c) => c.folder === "src/orders");
+    assert.deepEqual(orders?.model, { kind: "file", file: "Orders.qnt", line: 4, path: "src/orders/Orders.qnt" });
+    assert.equal(model.unmodelled, undefined, "every spec names a model or why not");
+  });
+  withModel({ "Widgets.spec.md": head("model: Missing.qnt") }, (model) => {
+    assert.match(model.problems.map((p) => p.message).join("\n"), /model: Missing.qnt does not exist beside the spec/);
+  });
+  withModel({ "Widgets.spec.md": head("model: ../Outside.qnt") }, (model) => {
+    assert.match(model.problems.map((p) => p.message).join("\n"), /climbs out of the component/);
+  });
+
+  // Required by the config: a spec with no line is a problem; not required, the valid adopter inputs raise none.
+  const required = { "coherence.config.json": JSON.stringify({ models: true }), "Widgets.spec.md": head("") };
+  withModel(required, (model) => assert.ok(model.problems.some((p) => p.file === "Widgets.spec.md" && /no model: line/.test(p.message))));
+  withModel({ ...required, "coherence.config.json": JSON.stringify({ models: { required: true } }) }, (model) => assert.ok(model.problems.some((p) => /no model: line/.test(p.message))));
+  // A project that never names a model: no problem and no advisory, as every adopter's spec reads today.
+  withModel({ "Widgets.spec.md": ENTRY, "src/door/Door.spec.md": head("") }, (model) => {
+    assert.deepEqual(model.problems, []);
+    assert.equal(model.unmodelled, undefined);
+  });
+  withModel({ "coherence.config.json": JSON.stringify({ models: false }), "Widgets.spec.md": ENTRY }, (model) => assert.deepEqual(model.problems, []));
+  // A project that names one model and does not require the line: the others are advisories, never problems.
+  withModel({ "Widgets.spec.md": head("model: none — the entry spec"), "src/door/Door.spec.md": head("") }, (model) => {
+    assert.deepEqual(model.problems, []);
+    assert.deepEqual(model.unmodelled?.map((p) => p.file), ["src/door/Door.spec.md"]);
+    assert.match(formatReport(model), /^COVERAGE {2}src\/door\/Door\.spec\.md:1 {2}names no model/m);
+  });
+});

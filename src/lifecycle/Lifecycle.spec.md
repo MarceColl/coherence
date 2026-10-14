@@ -1,6 +1,7 @@
 # Lifecycle
 
 The gyroscope delivered through harness events: orient at start, regulate at stop, the lexicon injected and checked.
+model: planned — a lexicon change from propose through apply
 
 ## entrances
 - SessionStart: the agent host starts a session; orient injects the vocabulary, the project's standing, and the session's work order

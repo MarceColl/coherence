@@ -1,6 +1,7 @@
 # Mirrors
 
 The mirror reading: the lists a project keeps by hand that must mirror something defined elsewhere (the defect family hand-list), found by overlap between literal collections and what code derives (a folder's files, the import closure of a list of files, a module's exports, the keys a file reads), explained by git history, read from git objects at one revision, and advisory: on request through query mirrors, and at a session's start from the last reading kept, never one taken in a hook.
+model: none — a reading over one revision
 
 ## invariants
 - reads one revision: The mirror reading reads every file from git objects at one revision, HEAD unless another is asked for, and never the working tree, so an edit not yet committed changes nothing it says and an older revision reads as it was committed.
