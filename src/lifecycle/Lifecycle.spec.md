@@ -414,11 +414,10 @@ The gyroscope delivered through harness events: orient at start, regulate at sto
   because: --help printed "unknown verb" and there was no --version, so an adopter had no way to ask which Coherence they had; the usage names npx --no -- coherence, since npx takes a --version given before -- as its own
   refuted: dropped -v from the version spellings -> "--version, -v, version, --help, -h and help answer at the top level" went red in version.test.ts on its own assertion (-v: unknown verb "-v"); restored byte for byte, green batched and alone (2026-10-08)
   kinds: none
-- the README's version floor is the current release: Every @posthog/coherence@^<major.minor> the README's setup prompts carry is package.json's major.minor, the prompts invoke Coherence as npx --no -- coherence and never as npx --no coherence, and they name pnpm's minimumReleaseAgeExclude.
-  over: the README's quick, full and monorepo setup prompts against package.json's version
-  via: the README's setup asks for at least the current major.minor of Coherence, invoked through npx --no --
-  because: a setup prompt with no floor let a release-age setting install 1.1.1, which lacks practices, with nothing failing; a floor written by hand drifts at the next minor release, so the test holds it to package.json
-  refuted: set the quick setup's floor to ^1.4 -> "the README's setup asks for at least the current major.minor of Coherence, invoked through npx --no --" went red in version.test.ts on its own assertion (every floor is package.json's major.minor); restored byte for byte, green batched and alone (2026-10-08)
+- the README's setup installs the latest release: Every install of @posthog/coherence the README's setup prompts carry asks for @latest, never a version or a range, no example in the README shows a version of Coherence, the prompts invoke Coherence as npx --no -- coherence and never as npx --no coherence, and they name pnpm's minimumReleaseAgeExclude.
+  over: the README's quick, full and monorepo setup prompts and its examples
+  via: the README's setup installs Coherence's latest release and names no version, invoked through npx --no --
+  because: a version written into the README goes stale at the next release unless someone bumps it by hand, and the floor it held (a release-age setting once installed 1.1.1, which lacks practices, with nothing failing) is kept another way: @latest names the newest release, the prompt has pnpm's release-age setting exempt Coherence, and a session start says when a newer release is published than the one running
   kinds: none
 - feed injects subjects only: At prompt and tool boundaries the peer feed injects the subjects of records other sessions wrote since this session's cursor, twelve at most with a count of the rest and the command that shows them whole; a full record is never injected.
   over: every record another session wrote after the cursor, at every UserPromptSubmit and PostToolUse
