@@ -52,7 +52,40 @@ import { JsonRpcClient } from "./jsonrpc.ts";
 import { horizonFolders, keepHorizonFiles, keepProjectFiles, projectListing, walkBounds, walkedProjectFiles, type ProjectListing } from "./project-files.ts";
 
 const SERVER_BIN = "typescript-language-server";
-const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts"]);
+const TYPESCRIPT_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts"]);
+const JAVASCRIPT_EXTENSIONS = new Set([".js", ".jsx", ".mjs", ".cjs"]);
+const SOURCE_EXTENSIONS = new Set([...TYPESCRIPT_EXTENSIONS, ...JAVASCRIPT_EXTENSIONS]);
+
+/**
+ * The sources the project is written in: when any TypeScript source is in the
+ * walk, only the TypeScript sources, since a JavaScript file beside them is
+ * compiled output a repository tracks (`dist/`, `lib/`) or a loose script,
+ * and a seed or a text search that reaches for it lands in an inferred
+ * project around the compiled copy; a project with no TypeScript source is
+ * written in JavaScript, and those files are its sources. A mixed project
+ * that compiles with `allowJs` still has a TypeScript seed, and the project
+ * that seed loads includes its JavaScript modules, so their symbols resolve
+ * through the server rather than through this list.
+ */
+export function projectSources(files: readonly string[]): string[] {
+  const sources = files.filter((rel) => SOURCE_EXTENSIONS.has(extensionOf(rel)) && !/\.d\.ts$/.test(rel));
+  const typescript = sources.filter((rel) => TYPESCRIPT_EXTENSIONS.has(extensionOf(rel)));
+  return typescript.length > 0 ? typescript : sources;
+}
+
+/** The LSP language id tsserver expects for a file: a JavaScript file opened as "typescript" is parsed as TypeScript, is not the file the project knows, and every later query about it fails. */
+function languageIdOf(file: string): "typescript" | "typescriptreact" | "javascript" | "javascriptreact" {
+  const extension = extensionOf(file);
+  if (extension === ".tsx") return "typescriptreact";
+  if (extension === ".jsx") return "javascriptreact";
+  return JAVASCRIPT_EXTENSIONS.has(extension) ? "javascript" : "typescript";
+}
+
+/** The extension a synthetic document beside `file` takes, so the project that includes `file` includes the synthetic too: a `.ts` probe beside a `.mjs` module lands in an inferred project the references query never sees. */
+function syntheticExtensionBeside(file: string): string {
+  const extension = extensionOf(file);
+  return JAVASCRIPT_EXTENSIONS.has(extension) ? extension : ".ts";
+}
 
 export const TYPESCRIPT_LADDER: Ladder = {
   top: "visibility-choked",
@@ -122,7 +155,7 @@ function walkedFiles(root: string): string[] {
  * file of the walk.
  */
 export function seedFile(files: readonly string[]): string | undefined {
-  const sources = files.filter((rel) => SOURCE_EXTENSIONS.has(extensionOf(rel)) && !/\.d\.ts$/.test(rel));
+  const sources = projectSources(files);
   const components = [...new Set(files.filter((rel) => rel.endsWith(".spec.md")).map((rel) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : ".")))].filter((f) => f !== ".");
   return sources.find((rel) => components.some((folder) => rel.startsWith(`${folder}/`))) ?? sources[0];
 }
@@ -180,16 +213,39 @@ export function sourceFilesUnder(root: string): string[] {
   return walkedFiles(root).filter((rel) => SOURCE_EXTENSIONS.has(extensionOf(rel)));
 }
 
-/** The file a relative module specifier names, project-relative, or undefined when it is a package or points outside. */
-export function resolveSpecifier(from: string, specifier: string): string | undefined {
-  if (!specifier.startsWith(".")) return undefined;
+/**
+ * Every project-relative file a relative module specifier may name, in the
+ * order a resolver tries them: the specifier as written, then the TypeScript
+ * sources it rewrites to (a NodeNext project writes `./foo.js` and means
+ * `foo.ts`), then the JavaScript ones, then each folder index. Empty when the
+ * specifier is a package or points outside the project. A caller that can
+ * test existence takes the first candidate that exists; a caller that keys a
+ * site by its module keys it by every candidate, since without the file list
+ * `./foo.js` is `foo.ts` in one project and `foo.js` in the next.
+ */
+export function specifierCandidates(from: string, specifier: string): string[] {
+  if (!specifier.startsWith(".")) return [];
   const dir = dirname(from);
   const base = join(dir, specifier).split(sep).join("/");
-  if (base.startsWith("..")) return undefined;
-  const stripped = base.replace(/\.(js|mjs|cjs|ts|mts|cts|tsx)$/, "");
-  return [base, `${stripped}.ts`, `${stripped}.tsx`, `${stripped}.mts`, `${stripped}.cts`, `${stripped}/index.ts`, `${base}/index.ts`].find(
-    (candidate) => SOURCE_EXTENSIONS.has(extensionOf(candidate)),
-  );
+  if (base.startsWith("..")) return [];
+  const stripped = base.replace(/\.(js|jsx|mjs|cjs|ts|tsx|mts|cts)$/, "");
+  const candidates = [
+    base,
+    ...[".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"].map((extension) => `${stripped}${extension}`),
+    ...[".ts", ".tsx", ".js", ".jsx"].flatMap((extension) => [`${stripped}/index${extension}`, `${base}/index${extension}`]),
+  ];
+  return [...new Set(candidates.filter((candidate) => SOURCE_EXTENSIONS.has(extensionOf(candidate))))];
+}
+
+/**
+ * The file a relative module specifier names, project-relative: the first
+ * candidate that `exists`, or without an existence test the first candidate
+ * at all; undefined when it is a package, points outside, or no candidate
+ * exists.
+ */
+export function resolveSpecifier(from: string, specifier: string, exists?: (candidate: string) => boolean): string | undefined {
+  const candidates = specifierCandidates(from, specifier);
+  return exists === undefined ? candidates[0] : candidates.find(exists);
 }
 
 function flatten(symbols: DocumentSymbol[], prefix: string[] = []): { path: string[]; symbol: DocumentSymbol }[] {
@@ -319,7 +375,7 @@ export class TypeScriptAdapter implements LanguageAdapter {
   private open(file: string, text?: string): void {
     if (this.opened.has(file)) return;
     const content = text ?? readFileSync(join(this.root, file), "utf8");
-    this.client!.notify("textDocument/didOpen", { textDocument: { uri: this.uri(file), languageId: "typescript", version: 1, text: content } });
+    this.client!.notify("textDocument/didOpen", { textDocument: { uri: this.uri(file), languageId: languageIdOf(file), version: 1, text: content } });
     this.opened.add(file);
     this.versions.set(file, 1);
   }
@@ -455,7 +511,7 @@ export class TypeScriptAdapter implements LanguageAdapter {
     // The server searches only the projects it has loaded: a name it does not know yet (a cold server, a second tsconfig) is
     // looked for in the files whose text spells it, and confirmed by their document symbols, never by the text alone.
     const spelled = new RegExp(`(^|[^\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^\\w$]|$)`);
-    for (const file of this.walkedNow().filter((rel) => SOURCE_EXTENSIONS.has(extensionOf(rel)) && !/\.d\.ts$/.test(rel))) {
+    for (const file of projectSources(this.walkedNow())) {
       let text: string;
       try {
         text = readFileSync(join(this.root, file), "utf8");
@@ -571,6 +627,7 @@ export class TypeScriptAdapter implements LanguageAdapter {
   /** The sites where another module re-exports this file wholesale, scanned once per forget because the reference query never reports them. */
   private wildcardReExports(file: string): ReferenceSite[] {
     if (this.wildcards === undefined) {
+      const walked = new Set(this.walkedNow());
       const found = new Map<string, ReferenceSite[]>();
       for (const source of sourceFilesUnder(this.root)) {
         let lines: string[];
@@ -582,7 +639,7 @@ export class TypeScriptAdapter implements LanguageAdapter {
         for (let i = 0; i < lines.length; i++) {
           const match = WILDCARD_REEXPORT.exec(lines[i] ?? "");
           if (match === null) continue;
-          const target = resolveSpecifier(source, match[1]!);
+          const target = resolveSpecifier(source, match[1]!, (candidate) => walked.has(candidate));
           if (target === undefined) continue;
           const list = found.get(target) ?? [];
           list.push({ file: source, line: i + 1, character: (lines[i] ?? "").indexOf("*"), symbol: undefined, form: "re-export" });
@@ -681,10 +738,13 @@ export class TypeScriptAdapter implements LanguageAdapter {
   private async refusedByCompiler(client: JsonRpcClient, protectedThing: Definition, name: string): Promise<Refutation> {
     const dir = dirname(protectedThing.file);
     const base = protectedThing.file.slice(dir === "." ? 0 : dir.length + 1);
-    const synthetic = `${dir === "." ? "" : dir + "/"}coherence-refutation-${randomBytes(4).toString("hex")}.ts`;
-    const text = `import { ${name} } from "./${base}";\nexport const coherenceRefutation = ${name};\n`;
+    const synthetic = `${dir === "." ? "" : dir + "/"}coherence-refutation-${randomBytes(4).toString("hex")}${syntheticExtensionBeside(protectedThing.file)}`;
+    // A JavaScript document is type-checked only under checkJs or `// @ts-check`; without it the compiler publishes no
+    // diagnostic, and the refusal an ES module's link would raise is never seen. The probe asks for the check itself.
+    const checked = JAVASCRIPT_EXTENSIONS.has(extensionOf(synthetic)) ? "// @ts-check\n" : "";
+    const text = `${checked}import { ${name} } from "./${base}";\nexport const coherenceRefutation = ${name};\n`;
     this.diagnostics.delete(synthetic);
-    client.notify("textDocument/didOpen", { textDocument: { uri: this.uri(synthetic), languageId: "typescript", version: 1, text } });
+    client.notify("textDocument/didOpen", { textDocument: { uri: this.uri(synthetic), languageId: languageIdOf(synthetic), version: 1, text } });
     this.lineCache.set(synthetic, text.split("\n"));
     this.symbolCache.set(synthetic, []);
     try {
@@ -721,9 +781,9 @@ export class TypeScriptAdapter implements LanguageAdapter {
   private async stage(client: JsonRpcClient, protectedThing: Definition, chokepoint: Definition | undefined, name: string, exempt?: string): Promise<Refutation> {
     const dir = dirname(protectedThing.file);
     const base = protectedThing.file.slice(dir === "." ? 0 : dir.length + 1);
-    const synthetic = `${dir === "." ? "" : dir + "/"}coherence-refutation-${randomBytes(4).toString("hex")}.ts`;
+    const synthetic = `${dir === "." ? "" : dir + "/"}coherence-refutation-${randomBytes(4).toString("hex")}${syntheticExtensionBeside(protectedThing.file)}`;
     const reExport = `export { ${name} } from "./${base}";\n`;
-    client.notify("textDocument/didOpen", { textDocument: { uri: this.uri(synthetic), languageId: "typescript", version: 1, text: reExport } });
+    client.notify("textDocument/didOpen", { textDocument: { uri: this.uri(synthetic), languageId: languageIdOf(synthetic), version: 1, text: reExport } });
     this.lineCache.set(synthetic, reExport.split("\n"));
     this.symbolCache.set(synthetic, []);
     this.probes.add(synthetic);
@@ -737,11 +797,11 @@ export class TypeScriptAdapter implements LanguageAdapter {
     expected.push({ what: `a re-export of ${name} from the unsaved document ${synthetic}`, file: synthetic, line: 1 });
     // Where the chokepoint governs only references from outside a folder, a plain use from outside it must still be a bypass.
     const beside = exempt === undefined ? undefined : outsideOfFolder(exempt);
-    const outside = beside === undefined ? undefined : `${beside}coherence-refutation-${randomBytes(4).toString("hex")}.ts`;
+    const outside = beside === undefined ? undefined : `${beside}coherence-refutation-${randomBytes(4).toString("hex")}${syntheticExtensionBeside(protectedThing.file)}`;
     if (outside !== undefined) {
       const specifier = `./${relative(dirname(outside), protectedThing.file).split(sep).join("/")}`.replace(/^\.\/\.\.\//, "../");
       const use = `import { ${name} as coherenceRefutationName } from "${specifier}";\nexport const coherenceRefutationUse = coherenceRefutationName;\n`;
-      client.notify("textDocument/didOpen", { textDocument: { uri: this.uri(outside), languageId: "typescript", version: 1, text: use } });
+      client.notify("textDocument/didOpen", { textDocument: { uri: this.uri(outside), languageId: languageIdOf(outside), version: 1, text: use } });
       this.lineCache.set(outside, use.split("\n"));
       this.symbolCache.set(outside, []);
       this.probes.add(outside);
