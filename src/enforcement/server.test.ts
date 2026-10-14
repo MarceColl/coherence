@@ -312,7 +312,11 @@ function rawLine(socketPath: string, line: string): Promise<{ answer: string; cl
       clearTimeout(timer);
       resolve({ answer, closed: true });
     });
-    socket.on("error", reject);
+    // A refused connection is ended by the server; this side's own end can then meet the closed peer as EPIPE or
+    // ECONNRESET, which is the close the test asks for, not a failure of it.
+    socket.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EPIPE" && error.code !== "ECONNRESET") reject(error);
+    });
     socket.on("connect", () => socket.write(line + "\n"));
   });
 }
