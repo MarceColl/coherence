@@ -1,9 +1,9 @@
 # Coherence checks itself on every pull request and every push to main: the
 # typecheck, the unit tests (in two shards), the lexicon and spec checks (what
-# npm test runs), and a
-# chokepoint run over Coherence's own invariants. A test proves code behaves;
-# only the chokepoint run proves no code reaches around a declared door, and
-# without it a bypass reached main with every test green (df-5961bdb2).
+# npm test runs), a chokepoint run over Coherence's own invariants, and
+# conformance replay of its quint models. A test proves code behaves; only the
+# chokepoint run proves no code reaches around a declared door, and without it
+# a bypass reached main with every test green (df-5961bdb2).
 name: CI
 
 on:
@@ -128,6 +128,10 @@ jobs:
       # Every chokepoint graded in-process (no warm server); a broken one fails the run.
       - name: Chokepoints
         run: node --disable-warning=ExperimentalWarning src/cli.ts run --form chokepoint --no-server --session "ci-${{ github.run_id }}" --agent ci
+
+      # Each quint model held against the code's own tests: the Journal's work orders captured under a collector and replayed; a disagreement fails the run.
+      - name: Conformance
+        run: node --disable-warning=ExperimentalWarning src/cli.ts conform --session "ci-${{ github.run_id }}" --agent ci
 
   # One check that stands for the rest: green only when every shard and the checks are.
   verify:
