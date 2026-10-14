@@ -10,7 +10,7 @@ import { appendWork, loadWork } from "../journal/work.ts";
 import type { Decision, WorkOrderRecord } from "../journal/record.ts";
 import { appendVerdict, loadVerdicts, type ConformanceVerdict } from "../conformance/store.ts";
 import { RECORD_STORES } from "./project.ts";
-import { ATTRIBUTES_FILE, ATTRIBUTES_TEXT, ATTRIBUTE_LINES, EARLIER_IGNORE_TEXTS, IGNORE_FILE, IGNORE_TEXT, keepAttributes, keepIgnore, keepStateFiles } from "./state-files.ts";
+import { ATTRIBUTES_FILE, ATTRIBUTES_TEXT, ATTRIBUTE_LINES, EARLIER_ATTRIBUTES_TEXTS, EARLIER_IGNORE_TEXTS, IGNORE_FILE, IGNORE_TEXT, keepAttributes, keepIgnore, keepStateFiles } from "./state-files.ts";
 
 const fixtures: string[] = [];
 
@@ -178,6 +178,13 @@ test("install and every session start keep .coherence/.gitattributes: written wh
   const added = kept.slice(own.length + 1).split("\n").filter((l) => l !== "" && !l.startsWith("#"));
   assert.deepEqual(added, ATTRIBUTE_LINES.filter((l) => l !== "journal/*.jsonl merge=union" && l !== "runs/** linguist-generated=true"), "only what the adopter does not set is added");
   assert.equal(keepAttributes(theirs), "kept", "a second keep adds nothing");
+
+  // An earlier release's own text, from before the conformance store: Coherence's, so brought up whole, never appended to.
+  const previous = fixture("earlier-attributes");
+  mkdirSync(join(previous, ".coherence"), { recursive: true });
+  writeFileSync(join(previous, ATTRIBUTES_FILE), EARLIER_ATTRIBUTES_TEXTS[0]!);
+  assert.equal(keepAttributes(previous), "upgraded");
+  assert.equal(readFileSync(join(previous, ATTRIBUTES_FILE), "utf8"), ATTRIBUTES_TEXT);
 
   // An adopter of an earlier release: its ignore file, which ignored the attributes file, is brought up at the session start.
   const earlier = fixture("earlier");
