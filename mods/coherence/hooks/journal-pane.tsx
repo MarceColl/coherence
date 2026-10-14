@@ -1,21 +1,27 @@
-// The Journal pane: a session's Coherence journal told as it happens and after
-// the fact. Each record reads in the lexicon's verb (decided, found,
+// The Journal pane: the project's Coherence journal told as it happens and
+// after the fact. Each record reads in the lexicon's verb (decided, found,
 // conjectured, needs you…) and its own words, which fold; under it, always,
 // a small tree of the files it pinged, so the person feels where the work went
-// without reading it. The records come from the project's own Coherence
-// (`coherence journal --session <id> --json`); the pings from the hooks' write
-// trace and the branch's own commits (journal.ts).
+// without reading it.
 //
-// The band's Journal button and `/journal [session]` open it; the agent
-// drives it through one tool, `mcp__coherence__journal`. While the pane is
-// open it keeps up with the journal file, looked at after each Bash call (the
-// way records are written): at the end it follows what lands, scrolled up it
-// holds still and counts what landed below.
+// Live, its default, it streams the latest records across every session in
+// the project's journal folder and in every git worktree of the repository,
+// each under its agent and its session's start, so a background agent's
+// decisions land beside the main session's as they are written; the store
+// files are read straight (journal.ts's LiveJournal), a look every ~2 s while
+// the pane is open and after each Bash call. One session's journal
+// (`/journal <session>`) is read through the project's own Coherence
+// (`coherence journal --session <id> --json`). The pings come from the hooks'
+// write trace and the branch's own commits, of the worktree the session ran in.
+//
+// The band's Journal button and `/journal [live|session]` open it; the agent
+// drives it through one tool, `mcp__coherence__journal`. At the end it follows
+// what lands, scrolled up it holds still and counts what landed below.
 
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface as Engine, On } from 'claude-code'
+import type { EngineInterface as Engine, On, Timer } from 'claude-code'
 import type { Contact, JournalEntry, JournalShown } from '../types'
-import { commitsOf, entriesOf, headlineOf, sessionOf, sourceOf, verbOf, wordsOf, writesOf, type Recorded } from './journal.ts'
+import { LiveJournal, commitsOf, entriesOf, headlineOf, isRecordFile, sessionOf, sessionOfFile, sourceOf, verbOf, wordsOf, writesOf, type JournalIo, type Recorded } from './journal.ts'
 import { place } from './place.ts'
 import { treeOf } from './tree.ts'
 
@@ -25,25 +31,43 @@ const NODE = ['node', '--disable-warning=ExperimentalWarning']
 const RECORDS = 60
 /** The width of the grid's gutter: time, verb, labels. */
 const GUTTER = 20
+/** How often the open pane looks at the journal's files. */
+const TICK_MS = 2000
 
 const shownJournal = atom({ plugin: 'coherence', key: 'journal' } as const, null as JournalShown | null)
 const opened = atom({ plugin: 'coherence', key: 'journalOpened' } as const, [] as string[])
 const view = atom({ plugin: 'coherence', key: 'journalView' } as const, { following: true, unseen: 0 })
 
+/** The module's own: one session's journal files last read, by their sizes and times, so an unchanged journal is not read again. */
+const seen = { session: '', signature: '' }
+/** The module's own: the live journal, what it has read of each file, and the open pane's timer. */
+const held: { live: LiveJournal | undefined; timer: Timer | undefined; isLooking: boolean } = { live: undefined, timer: undefined, isLooking: false }
 
-/** The module's own: the journal file last read, by its size and time, so an unchanged file is not read again. */
-const seen = { session: '', size: -1, mtimeMs: -1 }
+/** The disk and git, through the engine. */
+function ioOf($: Engine): JournalIo {
+  return {
+    list: dir => $.fs.list(dir),
+    read: path => $.fs.read(path),
+    tail: async (path, fromByte) => (await $.process.run(['tail', '-c', `+${fromByte + 1}`, path], { cwd: place.root })).stdout,
+    exists: path => $.fs.exists(path),
+    run: async (argv, cwd) => {
+      const ran = await $.process.run(argv, { cwd, timeoutMs: 30_000 }).catch(() => undefined)
+      return ran?.exitCode === 0 ? ran.stdout : ''
+    },
+    now: () => $.clock.now(),
+  }
+}
+
+/** The live journal for this session's project, made on first use. */
+function liveJournal(): LiveJournal {
+  if (held.live?.root !== place.root) held.live = new LiveJournal(place.root)
+  return held.live
+}
 
 /** The journal sessions on disk, newest file first. */
-async function sessions($: Engine, root: string): Promise<{ name: string; mtimeMs: number }[]> {
-  const dir = `${root}/.coherence/journal`
-  const entries = await $.fs.list(dir).catch(() => [])
-  const files = await Promise.all(
-    entries
-      .filter(e => e.kind === 'file' && e.name.endsWith('.jsonl'))
-      .map(async e => ({ name: e.name, mtimeMs: (await $.fs.stat(`${dir}/${e.name}`).catch(() => undefined))?.mtimeMs ?? 0 })),
-  )
-  return files.sort((a, b) => b.mtimeMs - a.mtimeMs)
+async function sessions($: Engine, root: string): Promise<{ name: string; size: number; mtimeMs: number }[]> {
+  const entries = await $.fs.list(`${root}/.coherence/journal`).catch(() => [])
+  return entries.filter(e => e.kind === 'file' && isRecordFile(e.name)).sort((a, b) => b.mtimeMs - a.mtimeMs)
 }
 
 /** The session a prefix names: this session's own when none is given and it has records, else the journal's latest. */
@@ -51,10 +75,20 @@ async function chosen($: Engine, prefix: string): Promise<string | undefined> {
   const files = await sessions($, place.root)
   if (prefix !== '') return sessionOf(prefix, files.map(f => f.name))
   const mine = await $.session.id()
-  return files.some(f => f.name === `${mine}.jsonl`) ? mine : sessionOf('', files.map(f => f.name))
+  return files.some(f => sessionOfFile(f.name) === mine) ? mine : sessionOf('', files.map(f => f.name))
 }
 
-/** Reads one session's journal through Coherence and tells it; undefined, with why, when it cannot. */
+/** A session's store files in the project's journal folder, as one signature of their names, sizes and times. */
+async function signatureOf($: Engine, session: string): Promise<string> {
+  const files = await sessions($, place.root)
+  return files
+    .filter(f => sessionOfFile(f.name) === session)
+    .map(f => `${f.name}:${f.size}:${f.mtimeMs}`)
+    .sort()
+    .join('|')
+}
+
+/** Reads one session's journal through Coherence and tells it; why not, when it cannot. */
 async function told($: Engine, session: string): Promise<JournalShown | string> {
   const cli = place.cli
   if (cli === undefined) return 'no Coherence command line'
@@ -71,13 +105,33 @@ async function told($: Engine, session: string): Promise<JournalShown | string> 
   return { session, records: entriesOf(records, commitsOf(log), writesOf(typeof trace === 'string' ? trace : '')), waiting: (said.escalations ?? []).length }
 }
 
+/** The live view: the latest records across every session and worktree, each told with its tree. */
+async function toldLive($: Engine): Promise<JournalShown> {
+  const io = ioOf($)
+  const live = liveJournal()
+  const latest = live.latest(RECORDS)
+  const records = await live.entries(io, latest)
+  const worktrees = (await live.worktrees(io)).length
+  return { session: 'live', records, waiting: live.waiting, live: { total: live.total, sessions: new Set(latest.map(r => r.session)).size, worktrees, damaged: live.damaged } }
+}
+
+/** The journal's headline as the title and the agent read it. */
+function headOf(shown: JournalShown): string {
+  const damaged = shown.live === undefined || shown.live.damaged === 0 ? '' : ` · ${shown.live.damaged} damaged line${shown.live.damaged === 1 ? '' : 's'} skipped`
+  return `${shown.live === undefined ? shown.session.slice(0, 8) : 'live'} · ${headlineOf(shown.records, shown.waiting)}${damaged}`
+}
+
+/** Whether the pane is open. */
+async function isOpen($: Engine): Promise<boolean> {
+  return (await $.ui.panes().catch(() => [])).some(p => p.id === JOURNAL_PANE)
+}
+
 /** The pane's title: the journal's headline, and what landed below while the person read further up. */
 async function retitle($: Engine): Promise<void> {
-  if (!(await $.ui.panes().catch(() => [])).some(p => p.id === JOURNAL_PANE)) return
+  if (!(await isOpen($))) return
   const shown = await read($, shownJournal)
   const { unseen } = await read($, view)
-  const head = shown === null ? '' : ` · ${shown.session.slice(0, 8)} · ${headlineOf(shown.records, shown.waiting)}`
-  await $.ui.open({ id: JOURNAL_PANE, title: `Journal${head}${unseen === 0 ? '' : ` · ↓ ${unseen} new below`}` }).catch(() => undefined)
+  await $.ui.open({ id: JOURNAL_PANE, title: `Journal${shown === null ? '' : ` · ${headOf(shown)}`}${unseen === 0 ? '' : ` · ↓ ${unseen} new below`}` }).catch(() => undefined)
 }
 
 /** Back to the journal's end: the window follows again and what landed below counts as seen. */
@@ -87,41 +141,88 @@ async function toEnd($: Engine): Promise<void> {
   await retitle($)
 }
 
-/** Opens the pane on a session's journal (this session's, else the latest) and says what it shows. */
+/** While the pane is open, a look every TICK_MS; the look ends the timer once the pane is closed. */
+function startLooking($: Engine): void {
+  if (held.timer !== undefined) return
+  held.timer = $.clock.every(TICK_MS, () => void look($).catch(() => undefined))
+}
+
+/** Opens the pane on the live journal and says what it shows. */
+async function openLive($: Engine): Promise<string> {
+  await liveJournal().scan(ioOf($))
+  const shown = await toldLive($)
+  await update($, shownJournal, () => shown)
+  await $.ui.open({ id: JOURNAL_PANE, title: 'Journal' })
+  startLooking($)
+  await toEnd($)
+  const live = shown.live
+  return `The Journal pane streams the latest ${shown.records.length} of ${live?.total ?? 0} records, ${live?.sessions ?? 0} sessions across ${live?.worktrees ?? 1} worktrees: ${headOf(shown).replace(/^live · /, '')}.`
+}
+
+/** Opens the pane: live when no session is named (or `live` is), else on that session's journal; says what it shows. */
 async function openJournal($: Engine, prefix = ''): Promise<string> {
   if (place.root === '') return 'Coherence is still starting; try again in a moment.'
+  if (prefix === '' || prefix === 'live') return openLive($)
   const session = await chosen($, prefix)
-  if (session === undefined) return prefix === '' ? 'The journal has no records yet.' : `No journal session starts ${prefix}.`
+  if (session === undefined) return `No journal session starts ${prefix}.`
   const shown = await told($, session)
   if (typeof shown === 'string') return `The journal could not be read: ${shown}`
   await update($, shownJournal, () => shown)
-  const stat = await $.fs.stat(`${place.root}/.coherence/journal/${session}.jsonl`).catch(() => undefined)
-  if (stat !== undefined) Object.assign(seen, { session, size: stat.size, mtimeMs: stat.mtimeMs })
+  Object.assign(seen, { session, signature: await signatureOf($, session) })
   await $.ui.open({ id: JOURNAL_PANE, title: 'Journal' })
+  startLooking($)
   await toEnd($)
   return `The Journal pane shows ${session}: ${shown.records.length} records, ${headlineOf(shown.records, shown.waiting)}.`
 }
 
-/** While the pane is open, a journal file that grew is read again: at the end the pane follows it, scrolled up it counts what landed. */
-async function keepUp($: Engine): Promise<void> {
-  if (!(await $.ui.panes().catch(() => [])).some(p => p.id === JOURNAL_PANE)) return
-  const shown = await read($, shownJournal)
-  if (shown === null) return
-  const stat = await $.fs.stat(`${place.root}/.coherence/journal/${shown.session}.jsonl`).catch(() => undefined)
-  if (stat === undefined || (seen.session === shown.session && seen.size === stat.size && seen.mtimeMs === stat.mtimeMs)) return
-  Object.assign(seen, { session: shown.session, size: stat.size, mtimeMs: stat.mtimeMs })
-  const next = await told($, shown.session)
-  if (typeof next === 'string') return
-  const landed = next.records.length - shown.records.length
+/** What lands: at the end the pane follows it, scrolled up it counts what landed below. */
+async function land($: Engine, before: JournalShown, next: JournalShown): Promise<void> {
+  const had = new Set(before.records.map(r => r.id))
+  const last = before.records.at(-1)?.at ?? ''
+  const landed = next.records.filter(r => !had.has(r.id) && r.at >= last).length
   await update($, shownJournal, () => next)
   if ((await read($, view)).following) await $.ui.scroll({ in: JOURNAL_PANE, to: 'end' }).catch(() => undefined)
   else if (landed > 0) await update($, view, v => ({ ...v, unseen: v.unseen + landed }))
   await retitle($)
 }
 
+/**
+ * One look while the pane is open. Live: list the worktrees' journal folders
+ * and read what moved, never the command line. One session's: its files'
+ * signature, and the command line only when it moved. A closed pane ends the timer.
+ */
+async function look($: Engine): Promise<void> {
+  if (held.isLooking) return
+  held.isLooking = true
+  try {
+    if (!(await isOpen($))) {
+      held.timer?.cancel()
+      held.timer = undefined
+      return
+    }
+    const shown = await read($, shownJournal)
+    if (shown === null) return
+    if (shown.live !== undefined) {
+      const live = liveJournal()
+      const damaged = live.damaged
+      const { landed } = await live.scan(ioOf($))
+      if (landed.length === 0 && live.damaged === damaged) return
+      await land($, shown, await toldLive($))
+      return
+    }
+    const signature = await signatureOf($, shown.session)
+    if (signature === '' || (seen.session === shown.session && seen.signature === signature)) return
+    Object.assign(seen, { session: shown.session, signature })
+    const next = await told($, shown.session)
+    if (typeof next !== 'string') await land($, shown, next)
+  } finally {
+    held.isLooking = false
+  }
+}
+
 type Asked = { session?: string; open?: string[]; fold?: string[]; scrollTo?: string }
 
-/** The agent's hand on the pane: which session's journal, which records to open or fold, where to scroll. */
+/** The agent's hand on the pane: which journal, which records to open or fold, where to scroll. */
 async function drive($: Engine, asked: Asked): Promise<string> {
   const said: string[] = []
   if (asked.session !== undefined || (await read($, shownJournal)) === null) said.push(await openJournal($, asked.session ?? ''))
@@ -147,17 +248,17 @@ function clockOf(iso: string): string {
 }
 
 /** The /journal command, as the mod registers it at the session's start. */
-export const JOURNAL_COMMAND = { name: 'journal', description: "Open the Journal pane: this session's Coherence journal, or another's by its id's start" }
+export const JOURNAL_COMMAND = { name: 'journal', description: "Open the Journal pane: the latest records live across every session and worktree, or one session's journal by its id's start (/journal live goes back)" }
 
 /** The agent's hand on the pane, as the mod registers it at the session's start; served here as mcp__coherence__journal. */
 export const JOURNAL_TOOL = {
   name: 'journal',
   description:
-    "Controls the person's Journal pane, which tells them a session's Coherence journal: each record (decided, found, conjectured, needs you…) with a small tree of the files it touched. session: an id's start, this session's (else the latest) when left out. open / fold: record ids (d-…, df-…, c-…) whose words to open or fold. scrollTo: 'end', 'start' or a record id. Use it to show the person the record you are talking about.",
+    "Controls the person's Journal pane, which tells them the Coherence journal: each record (decided, found, conjectured, needs you…) under its agent and session, with a small tree of the files it touched. By default it streams the latest records live across every session and git worktree of the repository. session: an id's start shows that one session's journal; 'live' goes back to the live view; left out, the pane keeps what it shows (live when nothing is open). open / fold: record ids (d-…, df-…, c-…) whose words to open or fold. scrollTo: 'end', 'start' or a record id. Use it to show the person the record you are talking about.",
   inputSchema: {
     type: 'object',
     properties: {
-      session: { type: 'string', description: 'a session id or its start' },
+      session: { type: 'string', description: "a session id or its start, or 'live' for the latest records across every session and worktree" },
       open: { type: 'array', items: { type: 'string' } },
       fold: { type: 'array', items: { type: 'string' } },
       scrollTo: { type: 'string', description: "'end', 'start' or a record id" },
@@ -167,7 +268,7 @@ export const JOURNAL_TOOL = {
   isDeferred: false as const,
 }
 
-/** The pane's hooks: /journal, the agent's tool, the pane's opening, the person's scrolling, and the drawing. */
+/** The pane's hooks: /journal, the agent's tool, the pane's opening, the looks, the person's scrolling, and the drawing. */
 export function journalPane(on: On): void {
   on('command.run', { command: 'journal' }, async ($, e) => ({ text: await openJournal($, e.args.trim()) }))
 
@@ -179,17 +280,18 @@ export function journalPane(on: On): void {
     return { element: e.element }
   })
 
-  // Opened by another plugin or the host with nothing shown yet: it shows this session's journal, else the latest.
+  // Opened by another plugin or the host: it streams the live journal when nothing is shown, and looks again either way.
   on('ui.open', { id: JOURNAL_PANE }, async ($, e, next) => {
     const answer = await next(e)
     if ((await read($, shownJournal)) === null) void openJournal($).catch(() => undefined)
+    else startLooking($)
     return answer
   })
 
-  // A record is written through the command line, so a Bash call is when the journal may have grown.
+  // A record is written through the command line, so a Bash call is when the journal may well have grown: a look then, besides the timer's.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const ran = await next(e)
-    void keepUp($).catch(() => undefined)
+    void look($).catch(() => undefined)
     return ran
   })
 
@@ -214,7 +316,9 @@ export function journalPane(on: On): void {
     const toggle = (id: string) => () => void update($, opened, now => (now.includes(id) ? now.filter(x => x !== id) : [...now, id]))
     const contentWidth = Math.max(20, (e.props.bodyColumns ?? 80) - GUTTER - 1)
 
-    if (shown === null) return <Text dimColor>No journal is open. /journal opens this session's, or another's by its id's start.</Text>
+    // A reload starts the module over with the pane still drawn: its drawing starts the looks again.
+    if (shown !== null) startLooking($)
+    if (shown === null) return <Text dimColor>No journal is open. /journal streams the latest records live, or one session's by its id's start.</Text>
 
     // The grid: a gutter of fixed width and a content column that wraps inside itself.
     const row = (left: unknown, content: unknown) => (
@@ -273,7 +377,12 @@ export function journalPane(on: On): void {
       return (
         <Box key={`rec-${r.id}`} flexDirection="column" marginTop={r.kind === 'enactment' ? 0 : 1}>
           {isNewDay && <Text dimColor>{`${new Date(r.at).toDateString()}\n`}</Text>}
-          {isNewAgent && <Text bold>{r.agent}</Text>}
+          {isNewAgent && (
+            <Text>
+              <Text bold>{r.agent === '' ? 'unnamed agent' : r.agent}</Text>
+              {r.session !== undefined && <Text dimColor>{` · ${r.session.slice(0, 8)}`}</Text>}
+            </Text>
+          )}
           {row(
             <Box flexDirection="row">
               <Text dimColor>{time.padEnd(7)}</Text>
@@ -292,15 +401,18 @@ export function journalPane(on: On): void {
     return (
       <Box flexDirection="column">
         <Text wrap="wrap">
-          <Text bold>{`journal of ${shown.session.slice(0, 8)}`}</Text>
+          <Text bold>{shown.live === undefined ? `journal of ${shown.session.slice(0, 8)}` : 'live journal'}</Text>
           <Text dimColor>{` · ${headlineOf(shown.records, shown.waiting)}`}</Text>
         </Text>
-        {shown.records.length > records.length && <Text dimColor>{`${shown.records.length - records.length} earlier records`}</Text>}
+        {shown.live !== undefined && (
+          <Text dimColor wrap="wrap">{`latest ${shown.records.length} of ${shown.live.total} records · ${shown.live.sessions} sessions · ${shown.live.worktrees} worktrees${shown.live.damaged === 0 ? '' : ` · ${shown.live.damaged} damaged line${shown.live.damaged === 1 ? '' : 's'} skipped`}`}</Text>
+        )}
+        {shown.live === undefined && shown.records.length > records.length && <Text dimColor>{`${shown.records.length - records.length} earlier records`}</Text>}
         {records.map((r, i) => {
           const before = records[i - 1]
           // A cluster of records in one minute shows its time once.
           const time = before !== undefined && clockOf(before.at) === clockOf(r.at) && day(before.at) === day(r.at) ? '' : clockOf(r.at)
-          return record(r, time, before === undefined || before.agent !== r.agent, before === undefined || day(before.at) !== day(r.at))
+          return record(r, time, before === undefined || before.agent !== r.agent || before.session !== r.session, before === undefined || day(before.at) !== day(r.at))
         })}
         {/* Scrolled up with news below: a bar on the window's own bottom row, painted over the journal, that jumps to the end. */}
         {!window.following && window.unseen > 0 && e.props.scroll !== undefined && (

@@ -192,10 +192,13 @@ prompt (or run `/scope`). The agent still gets exactly what the settings
 hooks give it.
 
 Beside it, `Journal` (or `/journal [session]`) opens a pane that tells the
-session's journal as it is written: each decision, defect, conjecture and
+journal as it is written: each decision, defect, conjecture and
 escalation in its own words, folded to one line, over a small tree of the
-files it touched. The agent can point you at a record through the
-`mcp__coherence__journal` tool.
+files it touched. By default it streams the latest records live across
+every session and every git worktree of the repository, background agents'
+included, each under its agent and session; `/journal <session>` shows one
+session's and `/journal live` goes back. The agent can point you at a record
+through the `mcp__coherence__journal` tool.
 
 ```
 npx --no -- coherence hooks install --host claude --mod
