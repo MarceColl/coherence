@@ -12,8 +12,8 @@
  *
  * This module is the one place an adapter learns where a package is
  * (Adapters.spec.md, "packages found by the resolver"), and where the Rust
- * adapter learns where rust-analyzer is: a binary found on the machine, not
- * a package.
+ * and Go adapters learn where rust-analyzer and gopls are: binaries found on
+ * the machine, not packages.
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -146,6 +146,53 @@ export function locateRustAnalyzer(root: string, bin = "rust-analyzer", env: Nod
     if (probe.status === 0) return { found: true, command: candidate, args: [], path: candidate, looked: [...looked, `${bin} on PATH (${candidate})`] };
     const said = firstLine(probe);
     looked.push(`${bin} on PATH (${candidate}): ${/unknown binary/i.test(said) ? `a rustup proxy without the ${bin} component (${said})` : said}`);
+  }
+  if (!onPath) looked.push(`${bin} on PATH: none`);
+  return { found: false, looked };
+}
+
+/**
+ * gopls's binary, which is no npm package and so is found on the machine:
+ * COHERENCE_GOPLS when it names a file; else where `go install` puts it,
+ * `$(go env GOBIN)/gopls`, then each `$(go env GOPATH)` entry's `bin/gopls`;
+ * else the first gopls on PATH that answers `version`. gopls loads packages by
+ * running `go list`, so a gopls with no `go` on PATH is not a server that
+ * works, and is a reason too. Absent, every place looked is named.
+ */
+export function locateGopls(root: string, bin = "gopls", env: NodeJS.ProcessEnv = process.env): ServerLocation {
+  const looked: string[] = [];
+  const dirs = (env["PATH"] ?? "").split(delimiter).filter((dir) => dir !== "");
+  const childEnv = { ...process.env, ...env };
+  const go = dirs.map((dir) => join(dir, "go")).find((candidate) => existsSync(candidate));
+  const found = (path: string, where: string): ServerLocation =>
+    go === undefined
+      ? { found: false, looked: [...looked, `${where}, but no go on PATH: gopls runs go list to load packages`] }
+      : { found: true, command: path, args: ["serve"], path, looked: [...looked, where] };
+  const explicit = env["COHERENCE_GOPLS"];
+  if (explicit !== undefined && explicit !== "") {
+    if (existsSync(explicit)) return found(explicit, `COHERENCE_GOPLS (${explicit})`);
+    looked.push(`COHERENCE_GOPLS (${explicit}): no such file`);
+  } else looked.push("COHERENCE_GOPLS: unset");
+  if (go === undefined) looked.push(`go env GOBIN GOPATH: no go on PATH`);
+  else {
+    const goEnv = spawnSync(go, ["env", "GOBIN", "GOPATH"], { cwd: root, encoding: "utf8", env: childEnv, timeout: 30_000 });
+    if (goEnv.status !== 0) looked.push(`go env GOBIN GOPATH: ${firstLine(goEnv)}`);
+    else {
+      const [gobin = "", gopath = ""] = goEnv.stdout.split("\n").map((line) => line.trim());
+      const installed = [...(gobin === "" ? [] : [join(gobin, bin)]), ...gopath.split(delimiter).filter((p) => p !== "").map((p) => join(p, "bin", bin))];
+      const hit = installed.find((candidate) => existsSync(candidate));
+      if (hit !== undefined) return found(hit, `go install's ${bin} (${hit})`);
+      looked.push(`go install's ${bin}: none at ${installed.join(", ") || "no GOBIN or GOPATH"}`);
+    }
+  }
+  let onPath = false;
+  for (const dir of dirs) {
+    const candidate = join(dir, bin);
+    if (!existsSync(candidate)) continue;
+    onPath = true;
+    const probe = spawnSync(candidate, ["version"], { cwd: root, encoding: "utf8", env: childEnv, timeout: 30_000 });
+    if (probe.status === 0) return found(candidate, `${bin} on PATH (${candidate})`);
+    looked.push(`${bin} on PATH (${candidate}): ${firstLine(probe)}`);
   }
   if (!onPath) looked.push(`${bin} on PATH: none`);
   return { found: false, looked };

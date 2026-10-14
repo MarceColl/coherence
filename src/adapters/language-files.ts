@@ -17,6 +17,7 @@ const LANGUAGE_FILES: Record<Language, RegExp> = {
   typescript: /^(?!.*\.d\.ts$).*\.(?:[cm]?[tj]sx?)$/,
   python: /\.pyi?$/,
   rust: /\.rs$/,
+  go: /\.go$/,
 };
 
 /** The language a file is written in, by its extension, among the languages given (every language when none are); undefined for any other file. */

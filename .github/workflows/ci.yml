@@ -63,6 +63,15 @@ jobs:
         with:
           components: rust-analyzer, rust-src
 
+      # The Go adapter's server: no npm package, and gopls runs go list, so go is on PATH too. A missing one fails go.test.ts.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.x"
+          cache: false
+
+      - name: gopls
+        run: go install golang.org/x/tools/gopls@v0.23.0
+
       # Some fixtures commit to throwaway repositories.
       - name: Git identity
         run: |

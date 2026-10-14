@@ -402,12 +402,13 @@ Every key is in [docs/config.md](docs/config.md).
 ## Platform
 
 Coherence runs on Node 22.18 or newer, on macOS (Apple Silicon) or Linux, and
-reads TypeScript, Python and Rust projects, and projects that span more than
+reads TypeScript, Python, Rust and Go projects, and projects that span more than
 one (a Python backend beside a TypeScript frontend: list both languages and a
 test setup per runner, as [docs/config.md](docs/config.md#more-than-one-language) shows).
-Rust chokepoints are graded through rust-analyzer, found on the machine rather
-than installed by npm ([docs/enforcement.md](docs/enforcement.md#rust)); the
-economy and Scope readings do not read Rust yet, and say so by name.
+Rust chokepoints are graded through rust-analyzer and Go chokepoints through
+gopls, each found on the machine rather than installed by npm
+([docs/enforcement.md](docs/enforcement.md#rust), [Go](docs/enforcement.md#go)); the
+economy and Scope readings do not read Rust or Go yet, and say so by name.
 It works inside Claude Code and Codex. Where the project already runs a
 checker that refuses a boundary crossing, Coherence grades by it: Pyright's
 private-usage rule, an import-linter rule, or a `tach.toml` interface
@@ -416,7 +417,7 @@ graded checker-choked by tach). Coherence's own reference search still covers
 what such a checker cannot see.
 Coherence verifies itself: every screenshot here is its own Scope reading.
 
-The language adapters ask tsserver, Pyright and rust-analyzer for references. Where a Python
+The language adapters ask tsserver, Pyright, rust-analyzer and gopls for references. Where a Python
 project runs a checker that refuses a bypass, the chokepoint is graded on that
 checker: Pyright's reportPrivateUsage, an import-linter rule, or
 [tach](https://github.com/gauge-sh/tach). When the nearest `tach.toml` declares
@@ -461,7 +462,7 @@ field is refused before it is queued:
 | `platform` | both | `darwin`, `linux`, `win32` or `other` |
 | `node` | both | Node's major version |
 | `files` | both | the project's file count as a bucket: `<1k`, `1k-10k`, `10k-100k`, `>100k` |
-| `languages` | session | the configured languages: `typescript`, `python`, `rust` |
+| `languages` | session | the configured languages: `typescript`, `python`, `rust`, `go` |
 | `components` | session | the spec's component count as a bucket: `<10`, `10-100`, `100-1k`, `>1k` |
 | `registry` | session | whether the project is a leaf of a registry |
 | `<event>_count`, `<event>_p50_ms`, `<event>_p95_ms`, `<event>_max_ms` | session | for each hook event the session ran (`SessionStart`, `PostToolUse`, ...): how many calls, and their median, 95th percentile and slowest milliseconds |
@@ -577,13 +578,14 @@ observations and unresolved questions; it is not a semantic-completeness score.
 
 ## Test setup
 
-Use Node 22.18 or newer, Python 3.10 or newer, and a Rust toolchain with
-rust-analyzer. From the checkout root:
+Use Node 22.18 or newer, Python 3.10 or newer, a Rust toolchain with
+rust-analyzer, and Go 1.26 or newer with gopls. From the checkout root:
 
 ```sh
 npm ci
 npm run test:setup
 rustup component add rust-analyzer rust-src
+go install golang.org/x/tools/gopls@v0.23.0
 npm test
 ```
 
@@ -598,7 +600,9 @@ never install dependencies or need a network connection.
 A missing interpreter or pytest is a failure with setup instructions, not a
 skip. `npm run test:python` runs the Python adapter tests alone. The Rust
 adapter tests (`src/adapters/rust.test.ts`) drive a real rust-analyzer the same
-way: a missing one fails them, with the rustup command to install it.
+way: a missing one fails them, with the rustup command to install it. The Go
+adapter tests (`src/adapters/go.test.ts`) drive a real gopls: a missing gopls,
+or no `go` on PATH, fails them, with the go install command.
 
 The tests find `.venv/bin/python` relative to this checkout, even when their
 working directory differs. Set `COHERENCE_PYTHON` to use another interpreter

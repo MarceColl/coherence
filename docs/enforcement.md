@@ -215,6 +215,68 @@ the workspace are unseen. Totality oracles run through `cargo test` one at a
 time (`"test": "cargo test -q -- --exact {filter}"`, `"testMatch": "test
 result: ok\\. [1-9]"`); doctests are not run as `via`s.
 
+## Go
+
+`"language": "go"` grades through gopls. It is no npm package, so it is
+found on the machine: `COHERENCE_GOPLS` first, then where `go install` puts
+it (`$(go env GOBIN)`, then each `$(go env GOPATH)/bin`), then the first
+`gopls` on PATH that answers `version`. gopls loads packages by running `go
+list`, so `go` must be on PATH as well; a missing server, or a missing `go`,
+is a reason naming each place looked. Install it with `go install
+golang.org/x/tools/gopls@latest` (CI pins v0.23.0 on Go 1.27).
+
+Go's ladder has two rungs:
+
+- **visibility-choked** (the compiler, go build): the protected item's scope
+  stops short of the module. An unexported name is reachable only in its
+  package, its folder; an exported name under an `internal/` folder below
+  the module root only in the tree under that folder's parent (the last
+  `internal` on the path decides). The compiler refuses a use from outside;
+  inside, every reference is classified as usual, so a file chokepoint
+  inside the package is still checked by Coherence.
+- **reference-choked** (Coherence's check at the edit and in CI): an
+  exported name importable module-wide, an `internal/` at the module root
+  included, since in a single-module project it reaches every package.
+
+The adapter asks nothing indexed until gopls has ended its package load
+(the `$/progress` "Setting up workspace" ending "Finished loading
+packages."); a load that ends "Error loading packages" is a reason, never an
+empty answer. With `verboseWorkDoneProgress` every diagnosis is a progress
+too, so a refusal is read once the diagnosis that publishes it has ended.
+`-mod=mod` is dropped from `GOFLAGS`, so `go list` never rewrites `go.mod`.
+
+Go imports name packages, never a symbol, and Go has no re-export, so no
+site has a form. Test code lives in `_test.go` files, a test reference by
+its name, the external `pkg_test` package included. A module is a `.go`
+file; a package folder (`store/`) has no owner file and is refused with a
+reason: name one of its files or an item. A method is named by its own name
+(`set in store/store.go`), without its receiver. The walks leave out what
+the go command never builds, by place: a `vendor` beside a `go.mod`, and a
+`testdata` or `_`-prefixed folder inside a Go module.
+
+The refutation never touches disk. gopls publishes no diagnostics for a
+package that exists only in unsaved files, so for a visibility-choked item a
+new unsaved file in an existing package outside the scope (a `package main`
+first, which nothing imports, so no import cycle closes) imports the item's
+package and names it, and gopls's refusal (`undefined: …` or `not exported
+by package …`; for `internal/`, `use of internal package … not allowed`) is
+the refutation, with a control use in the item's own file that must not be
+refused. A staging that closes an import cycle is tried elsewhere, never
+read as a refusal. Otherwise an unsaved file in a new folder imports and
+uses the item, and the chokepoint's file gains a use past its range, and
+both must come back as bypasses.
+
+Named limits. A method or a field has no package-level name to stage, so its
+refutation is not run. A file outside the default build (a `//go:build`
+constraint gopls has not enabled) and a module outside the active build (no
+root `go.mod` or `go.work` naming it) are unseen. `//go:linkname` and
+`unsafe` reach unexported names with no refusal, and gopls reports no
+reference for them. An item of a `package main` cannot be imported, so its
+outside use is not staged. References on a concrete method include the
+interface methods it satisfies. Totality oracles run through `go test`
+(`"test": "go test ./... -run '^{filter}$'"`). The economy and Scope
+readings do not read Go yet, and say so by name.
+
 ## The run and its view
 
 A run appends one record to the session's shard, `.coherence/runs/<session>.<token>.jsonl` (docs/records-layout.md): time, session,

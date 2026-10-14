@@ -21,6 +21,7 @@ import { componentOf, declarationsOf, isTest, sourceFiles } from "../economy/sou
 import type { EnforcementConfig } from "../enforcement/config.ts";
 import type { Language } from "../adapters/index.ts";
 import type { SpecModel } from "../spec/model.ts";
+import { goDeclares } from "./go-interfaces.ts";
 import { pythonDeclares } from "./python-interfaces.ts";
 import { rustDeclares } from "./rust-interfaces.ts";
 import { typescriptDeclares } from "./typescript-interfaces.ts";
@@ -75,6 +76,7 @@ const DECLARES: Record<Language, (line: string) => InterfaceSymbol["declares"]> 
   typescript: typescriptDeclares,
   python: pythonDeclares,
   rust: rustDeclares,
+  go: goDeclares,
 };
 
 /** What a declaration line's keyword says can execute. */

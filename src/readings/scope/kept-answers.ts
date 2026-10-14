@@ -45,6 +45,7 @@ import type { Definition, ReferenceSite, ResolveHint, Resolved } from "../../ada
 import type { Language } from "../../adapters/index.ts";
 import { closureOf } from "../../enforcement/code-fingerprint.ts";
 import type { KeptReport } from "./model.ts";
+import { goKeptModules } from "./go-scope.ts";
 import { pythonKeptModules } from "./python-scope.ts";
 import { rustKeptModules } from "./rust-scope.ts";
 import { typescriptKeptModules } from "./typescript-scope.ts";
@@ -59,10 +60,11 @@ const KEPT_EXTENSIONS: Record<Language, readonly string[]> = {
   typescript: [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
   python: [".py", ".pyi"],
   rust: [".rs"],
+  go: [".go"],
 };
 
 /** The project files besides source that a server's answers rest on: language configuration, manifests and lockfiles, by base name. */
-const BASIS_FILE = /^(?:tsconfig(?:\.[\w-]+)*\.json|jsconfig\.json|package\.json|pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|pyproject\.toml|pyrightconfig\.json|setup\.cfg|uv\.lock|poetry\.lock|requirements[\w.-]*\.txt|coherence\.config\.json)$/;
+const BASIS_FILE = /^(?:tsconfig(?:\.[\w-]+)*\.json|jsconfig\.json|package\.json|pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|pyproject\.toml|pyrightconfig\.json|setup\.cfg|uv\.lock|poetry\.lock|requirements[\w.-]*\.txt|go\.mod|go\.sum|go\.work|coherence\.config\.json)$/;
 
 /** Where the language adapters are entered: every module it reaches is code an answer comes from. */
 const ADAPTER_ENTRY = "adapters/index.ts";
@@ -86,6 +88,7 @@ const KEPT_MODULES: Record<Language, (file: string, text: string) => string[]> =
   typescript: typescriptKeptModules,
   python: pythonKeptModules,
   rust: rustKeptModules,
+  go: goKeptModules,
 };
 
 /** One kept answer and what it depends on: the files it names and the names that, spelled in a changed file, could change it. */

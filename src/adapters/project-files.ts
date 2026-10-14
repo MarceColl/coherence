@@ -269,6 +269,24 @@ export function isCargoTarget(dir: string): boolean {
   return basename(dir) === "target" && existsSync(join(dirname(dir), "Cargo.toml"));
 }
 
+/**
+ * Whether a folder on disk is one the go command never builds, and why: a
+ * vendor folder beside a go.mod, or a testdata or `_`-prefixed folder inside
+ * a Go module (a go.mod in its parent or above, up to the root). Named by its
+ * place, never by its name alone, since outside a Go module such a folder may
+ * hold the project's own code. Undefined for any other folder.
+ */
+export function goSkipped(root: string, folder: string): string | undefined {
+  const name = basename(folder);
+  const parent = dirname(folder);
+  if (name === "vendor") return existsSync(join(root, parent, "go.mod")) ? "Go vendor folder" : undefined;
+  if (name !== "testdata" && !name.startsWith("_")) return undefined;
+  for (let at = parent; ; at = dirname(at)) {
+    if (existsSync(join(root, at, "go.mod"))) return name === "testdata" ? "Go test data folder" : "Go-ignored folder";
+    if (at === "." || at === "") return undefined;
+  }
+}
+
 /** Whether a disk walk looking for folders (virtual environments, nested checkouts) may skip descending into one by its name: hidden, a host's, or an environment folder. */
 export function neverWalkedName(name: string): boolean {
   return name.startsWith(".") || HOST_FOLDERS.has(name) || ENVIRONMENT_FOLDERS.has(name);
@@ -285,7 +303,10 @@ function folderReason(bounds: Bounds, folder: string): string {
   else if (ENVIRONMENT_FOLDERS.has(name)) reason = `environment folder: ${folder}`;
   else if (isVirtualEnvironment(join(bounds.root, folder))) reason = `virtual environment: ${folder}`;
   else if (isCargoTarget(join(bounds.root, folder))) reason = `Cargo build folder: ${folder}`;
-  else reason = "";
+  else {
+    const go = goSkipped(bounds.root, folder);
+    reason = go === undefined ? "" : `${go}: ${folder}`;
+  }
   bounds.memo.set(folder, reason);
   return reason;
 }

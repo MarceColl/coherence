@@ -12,6 +12,7 @@ import { walkBounds, walkedProjectFiles } from "../adapters/project-files.ts";
 import type { Language } from "../adapters/index.ts";
 import { languageOfFile } from "../adapters/language-files.ts";
 import type { Component, SpecModel } from "../spec/model.ts";
+import { GO_SOURCE } from "./go-source.ts";
 import { PYTHON_SOURCE } from "./python-source.ts";
 import { RUST_SOURCE } from "./rust-source.ts";
 import { TYPESCRIPT_SOURCE } from "./typescript-source.ts";
@@ -26,6 +27,7 @@ const NOT_SOURCE: Record<Language, RegExp> = {
   typescript: /\.[cm]?jsx?$/,
   python: /\.pyi$/,
   rust: /(?!)/,
+  go: /(?!)/,
 };
 
 /** Whether a file is source the plain scan reads for the language. */
@@ -52,7 +54,8 @@ export function toRelative(root: string, path: string): string | undefined {
 
 /**
  * What the plain scan reads of one language's source, each language's in its
- * own module (typescript-source.ts, python-source.ts, rust-source.ts): a language
+ * own module (typescript-source.ts, python-source.ts, rust-source.ts,
+ * go-source.ts): a language
  * SOURCE_SYNTAX lacks fails to compile, never reads as another language.
  */
 export interface SourceSyntax {
@@ -74,6 +77,7 @@ const SOURCE_SYNTAX: Record<Language, () => SourceSyntax> = {
   typescript: () => TYPESCRIPT_SOURCE,
   python: () => PYTHON_SOURCE,
   rust: () => RUST_SOURCE,
+  go: () => GO_SOURCE,
 };
 
 export interface Declaration {

@@ -27,6 +27,7 @@ import { readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import type { Language } from "./index.ts";
 import { isTestPath } from "./adapter.ts";
+import { GO_ENTRANCES } from "./go-entrances.ts";
 import { PYTHON_ENTRANCES } from "./python-entrances.ts";
 import { RUST_ENTRANCES } from "./rust-entrances.ts";
 import { TYPESCRIPT_ENTRANCES } from "./typescript-entrances.ts";
@@ -73,12 +74,13 @@ export function escape(name: string): string {
 
 /**
  * What entrance detection knows of one language, each language's in its own
- * module (typescript-entrances.ts, python-entrances.ts, rust-entrances.ts): its rules, and the
+ * module (typescript-entrances.ts, python-entrances.ts, rust-entrances.ts,
+ * go-entrances.ts): its rules, and the
  * syntax the shared scans below read by. A language ENTRANCE_SYNTAX lacks
  * fails to compile, never reads as another language.
  */
 export interface EntranceSyntax {
-  /** Set when the reading detects none of the language's entrances yet (Rust): detection answers none for it, package.json's included. */
+  /** Set when the reading detects none of the language's entrances yet (Rust, Go): detection answers none for it, package.json's included. */
   undetected?: true;
   /** Whether a project file is code the language's rules read. */
   isCode(file: string): boolean;
@@ -110,6 +112,7 @@ const ENTRANCE_SYNTAX: Record<Language, () => EntranceSyntax> = {
   typescript: () => TYPESCRIPT_ENTRANCES,
   python: () => PYTHON_ENTRANCES,
   rust: () => RUST_ENTRANCES,
+  go: () => GO_ENTRANCES,
 };
 
 /** The lines of the statement or definition that starts at `start` (zero-based): until the next line at or left of its indentation that begins something new. */

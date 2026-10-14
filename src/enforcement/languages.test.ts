@@ -187,6 +187,8 @@ test("a multi-language config lists its languages and test setups; a file's lang
   assert.ok(isSourceFile("frontend/view.tsx", "typescript") && !isSourceFile("frontend/view.js", "typescript") && !isSourceFile("frontend/types.d.ts", "typescript"));
   assert.equal(languageOfFile("crates/kernel/src/lib.rs", ["python", "typescript", "rust"]), "rust");
   assert.equal(languageOfFile("crates/kernel/src/lib.rs", config.languages), undefined, "a Rust file is no language's in a project that does not list Rust");
+  assert.equal(languageOfFile("services/store/store.go", ["python", "typescript", "go"]), "go");
+  assert.equal(languageOfFile("services/store/store.go", config.languages), undefined, "a Go file is no language's in a project that does not list Go");
   assert.ok(setupClaims(config.tests[0]!, "backend/test_store.py") && !setupClaims(config.tests[0]!, "frontend/tokens.test.ts"));
   assert.ok(setupClaims({ ...config.tests[1]!, files: ["frontend/**/*.test.ts"] }, "frontend/a/b.test.ts"));
   assert.equal(languageSlot(root, "typescript"), "typescript");
@@ -198,10 +200,10 @@ test("a multi-language config lists its languages and test setups; a file's lang
       writeFileSync(join(bad, "coherence.config.json"), JSON.stringify(config));
       assert.throws(() => readEnforcementConfig(bad), pattern);
     };
-    refused({ language: ["python", "go"] }, /language lists "go"; each is one of typescript, python, rust/);
+    refused({ language: ["python", "java"] }, /language lists "java"; each is one of typescript, python, rust, go/);
     refused({ tests: [{ language: "python" }] }, /tests\[0\] names neither test nor testJson/);
     refused({ tests: [{ test: "pytest", cwd: "/abs" }] }, /tests\[0\]\.cwd is a folder relative to the project root/);
-    refused({ tests: [{ test: "pytest", language: "go" }] }, /tests\[0\]\.language is one of/);
+    refused({ tests: [{ test: "pytest", language: "java" }] }, /tests\[0\]\.language is one of/);
   } finally {
     rmSync(bad, { recursive: true, force: true });
   }

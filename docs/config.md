@@ -129,7 +129,7 @@ yet. For now, every leaf keeps its own `lexicon.json`.
 |---|---|---|
 | `projects` | none | At the repository root only: the folders opted in, which makes this file a registry. See [Several folders](#several-folders-a-registry). |
 | `name` | the folder's name | The project's name, as Scope and the lexicon's project layer show it. |
-| `language` | `typescript` | `typescript`, `python` or `rust`: which language server the chokepoint check asks (rust-analyzer for Rust; see [Rust](enforcement.md#rust)). A list (`["python", "typescript"]`) for a project that spans more than one; see [More than one language](#more-than-one-language). |
+| `language` | `typescript` | `typescript`, `python`, `rust` or `go`: which language server the chokepoint check asks (rust-analyzer for Rust, gopls for Go; see [Rust](enforcement.md#rust) and [Go](enforcement.md#go)). A list (`["python", "typescript"]`) for a project that spans more than one; see [More than one language](#more-than-one-language). |
 | `entryDir` | `.` | The folder holding the entry spec, the one that declares the trust levels. |
 | `ignore` | none | Folders that are not this project's code or prose: vendored code, generated output, fixtures, promo material. A name matches that folder anywhere; a path matches from the root. Every walk (the spec, the lexicon check, the reading) leaves them out. |
 | `lexicon` | `lexicon.json` | The project's lexicon file, relative to the root. |
@@ -183,7 +183,7 @@ project. List both languages, and give each runner its own test setup under
 
 **Which language a file is.** Its extension decides: `.py` and `.pyi` are
 Python; `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs` are
-TypeScript (a `.d.ts` file is neither); `.rs` is Rust. No two languages share
+TypeScript (a `.d.ts` file is neither); `.rs` is Rust; `.go` is Go. No two languages share
 an extension, so there is no per-folder override. The first language listed is the primary
 one.
 

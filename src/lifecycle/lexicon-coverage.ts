@@ -306,6 +306,8 @@ const MEMBER_SCANS: Record<Language, MemberScan> = {
   python: { opens: /^class\s/, closes: /^\S/, field: /^ {4}([a-z][A-Za-z0-9_]*)\s*:\s*[A-Za-z"'[]/ },
   // Rust is not read by this reading yet: no line opens a body, so a .rs file's struct fields are not read as TypeScript's.
   rust: { opens: /(?!)/, closes: /^[}\]]/, field: /(?!)/ },
+  // Go is not read by this reading yet: no line opens a body, so a .go file's struct fields are not read as TypeScript's.
+  go: { opens: /(?!)/, closes: /^[}\]]/, field: /(?!)/ },
 };
 
 /**

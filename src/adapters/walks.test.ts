@@ -4,8 +4,10 @@
  * folders a name list once skipped (api/public, dist, build, public) beside
  * the folders a rule does leave out: the config's ignore list, a hidden
  * folder, a host's folder, a dependency install, an interpreter's cache and
- * a virtual environment, and Cargo's build folder (a target beside a
- * Cargo.toml; a folder named target elsewhere is code). Every walker must read exactly what the one rule
+ * a virtual environment, Cargo's build folder (a target beside a
+ * Cargo.toml; a folder named target elsewhere is code), and the folders the
+ * go command never builds (a vendor beside a go.mod, a testdata or
+ * `_`-prefixed folder inside a Go module; outside one they are code). Every walker must read exactly what the one rule
  * leaves in, narrowed only by kind, and the rule must account for every
  * project file it leaves out.
  */
@@ -16,7 +18,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { after, before, test } from "node:test";
-import { projectFiles, walkBounds, walkedProjectFiles } from "./project-files.ts";
+import { goSkipped, projectFiles, walkBounds, walkedProjectFiles } from "./project-files.ts";
 import { pythonFiles } from "./python.ts";
 import { readEnforcementConfig } from "../enforcement/config.ts";
 import { sourceFiles } from "../economy/source.ts";
@@ -29,7 +31,7 @@ import { detectedEntrances } from "../readings/scope/component-interfaces.ts";
 const IGNORE = ["vendor"];
 
 /** Code a folder-name list once skipped: every walk must read it. */
-const NAMED_FOLDER_CODE = ["api/public/urls.py", "api/public/views.py", "dist/tool.py", "build/steps.py", "public/page.ts", "target/plan.py"];
+const NAMED_FOLDER_CODE = ["api/public/urls.py", "api/public/views.py", "dist/tool.py", "build/steps.py", "public/page.ts", "target/plan.py", "testdata/case.py", "_build/step.py"];
 
 /** Files a rule leaves out, with the rule that must name it. */
 const LEFT_OUT: Record<string, string> = {
@@ -40,6 +42,8 @@ const LEFT_OUT: Record<string, string> = {
   "pkg/__pycache__/cached.py": "environment folder: pkg/__pycache__",
   "env/lib/site.py": "virtual environment: env",
   "crate/target/debug/generated.py": "Cargo build folder: crate/target",
+  "gomod/testdata/fixture.py": "Go test data folder: gomod/testdata",
+  "gomod/pkg/_scratch/tool.py": "Go-ignored folder: gomod/pkg/_scratch",
 };
 
 let root: string;
@@ -61,6 +65,9 @@ before(() => {
   write("public/page.ts", "export const page = 1;\n");
   write("target/plan.py", "def plan():\n    return None\n");
   write("crate/Cargo.toml", '[package]\nname = "crate"\nversion = "0.1.0"\n');
+  write("testdata/case.py", "def case():\n    return None\n");
+  write("_build/step.py", "def step():\n    return None\n");
+  write("gomod/go.mod", "module example.com/gomod\n\ngo 1.22\n");
   write("env/pyvenv.cfg", "home = /usr/bin\n");
   for (const file of Object.keys(LEFT_OUT)) write(file, file.endsWith(".ts") ? "export const x = 1;\n" : "def x():\n    return None\n");
 });
@@ -78,6 +85,9 @@ test("every walk reads what the one rule leaves in: a folder is left out only by
   for (const [file, reason] of Object.entries(LEFT_OUT)) {
     assert.deepEqual(walked.excluded.find((e) => e.file === file), { file, reason }, `${file} is left out by its rule`);
   }
+  // The config's ignore list names vendor, so Go's vendor rule is read on its own: by its place beside a go.mod, never by its name.
+  assert.equal(goSkipped(root, "gomod/vendor"), "Go vendor folder");
+  assert.equal(goSkipped(root, "vendor"), undefined, "a vendor folder beside no go.mod is no Go vendor folder");
 
   // Every code walk reads the rule's files, narrowed by kind alone.
   assert.deepEqual(sourceFiles(root, "python", IGNORE), walked.files.filter((f) => f.endsWith(".py")));

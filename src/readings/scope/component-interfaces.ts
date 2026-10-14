@@ -89,13 +89,14 @@ import { languagesRead, notScannedYet } from "./languages-read.ts";
 import { isModuleHandler } from "../../spec/grammar.ts";
 import { declaresAtTop, loadSpecModel, type SpecModel } from "../../spec/model.ts";
 import type { EntranceGuard, EntranceResolution, InterfaceReading, InterfaceSymbol, KeptReport, ReachReference, ScopedReading } from "./model.ts";
+import { GO_INTERFACES } from "./go-scope.ts";
 import { PYTHON_INTERFACES } from "./python-scope.ts";
 import { RUST_INTERFACES } from "./rust-scope.ts";
 import { TYPESCRIPT_INTERFACES } from "./typescript-scope.ts";
 
 /**
  * What the reading knows of one language's syntax without its server, each
- * language's in its own module (typescript-scope.ts, python-scope.ts, rust-scope.ts): a
+ * language's in its own module (typescript-scope.ts, python-scope.ts, rust-scope.ts, go-scope.ts): a
  * language INTERFACE_SYNTAX lacks fails to compile, never reads as another
  * language.
  */
@@ -119,6 +120,7 @@ const INTERFACE_SYNTAX: Record<Language, InterfaceSyntax> = {
   typescript: TYPESCRIPT_INTERFACES,
   python: PYTHON_INTERFACES,
   rust: RUST_INTERFACES,
+  go: GO_INTERFACES,
 };
 
 /** Whether a declaration line declares a type only (an interface or a type alias): a route never follows one. */
@@ -238,6 +240,7 @@ const SITE_EXTENSIONS: Record<Language, readonly string[]> = {
   typescript: [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
   python: [".py", ".pyi"],
   rust: [".rs"],
+  go: [".go"],
 };
 
 /** Whether a project-relative file lies inside the bounds: no rule of the walk (exclusionOf) leaves it out. */
@@ -471,7 +474,7 @@ export function budgetFlags(values: ReadonlyMap<string, string>): Partial<Interf
 }
 
 /** A process that is a language server by its command line. */
-const LANGUAGE_SERVER = /pyright|langserver|tsserver|typescript-language-server|rust-analyzer/;
+const LANGUAGE_SERVER = /pyright|langserver|tsserver|typescript-language-server|rust-analyzer|gopls/;
 
 /**
  * The resident memory, in megabytes, of the language server the reading
