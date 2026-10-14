@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { commitsOf, entriesOf, headlineOf, recordsIn, sessionOf, sourceOf, verbOf, wordsOf, writesOf, type Recorded } from '../hooks/journal.ts'
+import { commitsOf, entriesOf, headlineOf, isRecordFile, recordsIn, sessionOf, sourceOf, verbOf, wordsOf, writesOf, type Recorded } from '../hooks/journal.ts'
 import { treeOf } from '../hooks/tree.ts'
 
 const SESSION = '8efd6465-4c20-4d13-9f34-c17de56799d9'
@@ -136,6 +136,13 @@ function engine(on: On, worktrees: string[] = ['/p']): World {
 const PANE = { plugin: 'coherence', surface: 'terminal' as const, component: 'Pane' as const, requestId: 'coherence-journal', props: { title: 'Journal', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 60 } } as never }
 const OTHER = 'b0b0b0b0-1111-2222-3333-444455556666'
 const cliRuns = (world: World): number => world.ran.filter(r => r.argv.join(' ').includes('cli.ts journal')).length
+
+test('a store file is a line shard or a packed one, as the store names them, and nothing else', () => {
+  expect(isRecordFile('8efd6465-4c20.a1b2c3d4.jsonl')).toBe(true)
+  expect(isRecordFile('8efd6465-4c20.a1b2c3d4.jsonseq')).toBe(true)
+  expect(isRecordFile('8efd6465-4c20.jsonl')).toBe(true)
+  expect(isRecordFile('notes.json')).toBe(false)
+})
 
 test("the band's Journal button sits beside Scope, and a press opens the pane streaming the journal live, without the command line", async ($, on) => {
   const world = engine(on)
