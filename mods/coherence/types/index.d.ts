@@ -10,6 +10,8 @@ export type JournalEntry = {
   kind: string
   at: string
   agent: string
+  /** The session that wrote it, from the record's own field. */
+  session?: string
   chose?: string
   over?: string[]
   because?: string
@@ -30,14 +32,21 @@ export type JournalEntry = {
   from: string[]
 }
 
-/** The journal the pane shows: one session's records, told, and how many of its escalations still wait on the person. */
-export type JournalShown = { session: string; records: JournalEntry[]; waiting: number }
+/** What the live view reads across: every record seen, the sessions among the latest shown, the worktrees looked in, and the pieces of the store files that were no record. */
+export type JournalLive = { total: number; sessions: number; worktrees: number; damaged: number }
+
+/**
+ * The journal the pane shows: one session's records, told, and how many of its
+ * escalations still wait on the person; or, with `live`, the latest records
+ * across every session and worktree, `session` then being 'live'.
+ */
+export type JournalShown = { session: string; records: JournalEntry[]; waiting: number; live?: JournalLive }
 
 declare module 'claude-code' {
   interface PluginState {
     coherence: {
       verdict: StateFamily<CoherenceVerdict>
-      /** The session's journal the Journal pane shows, null until it is opened. */
+      /** The journal the Journal pane shows, live or one session's, null until it is opened. */
       journal: JournalShown | null
       /** The records the person or the agent opened in the pane, and the trees drawn in full (`tree:<id>`). */
       journalOpened: string[]
