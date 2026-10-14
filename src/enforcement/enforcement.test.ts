@@ -531,7 +531,7 @@ export const sneak = SECRET_COLUMNS;
 export { SECRET_COLUMNS } from "../store/secrets.ts";
 `;
 
-async function ruledTree(seal: string): Promise<{ dir: string; adapter: TypeScriptAdapter }> {
+async function ruledTree(seal: string, extra: Record<string, string> = {}): Promise<{ dir: string; adapter: TypeScriptAdapter }> {
   const dir = mkdtempSync(join(tmpdir(), "coherence-ruling-"));
   const put = (path: string, text: string): void => {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
@@ -542,11 +542,13 @@ async function ruledTree(seal: string): Promise<{ dir: string; adapter: TypeScri
   put("src/door/seal.ts", seal);
   put("src/api/leak.ts", 'import { SECRET_COLUMNS } from "../store/secrets.ts";\nexport const held = SECRET_COLUMNS;\n');
   put("src/api/star.ts", 'export * from "../store/secrets.ts";\n');
+  for (const [path, text] of Object.entries(extra)) put(path, text);
   return { dir, adapter: new TypeScriptAdapter(dir) };
 }
 
 test("a plain import specifier in the chokepoint's own module is inside; the same import elsewhere, a re-export anywhere, a wildcard re-export, and a use outside the chokepoint's range are bypasses", async () => {
-  const { dir, adapter: fresh } = await ruledTree(RULING_SEAL);
+  // A NodeNext project writes the compiled name: `./secrets.js` means secrets.ts. The wildcard must still reach it.
+  const { dir, adapter: fresh } = await ruledTree(RULING_SEAL, { "src/api/star-js.ts": 'export * from "../store/secrets.js";\n' });
   try {
     const protectedThing = (await fresh.resolve("SECRET_COLUMNS in secrets.ts", hint)) as { ok: true; definition: import("../adapters/adapter.ts").Definition };
     const chokepoint = (await fresh.resolve("seal", hint)) as { ok: true; definition: import("../adapters/adapter.ts").Definition };
@@ -556,6 +558,7 @@ test("a plain import specifier in the chokepoint's own module is inside; the sam
     assert.deepEqual(classes, [
       "src/api/leak.ts:1 bypass",
       "src/api/leak.ts:2 bypass",
+      "src/api/star-js.ts:1 bypass",
       "src/api/star.ts:1 bypass",
       "src/door/seal.ts:1 inside",
       "src/door/seal.ts:4 inside",
@@ -565,6 +568,7 @@ test("a plain import specifier in the chokepoint's own module is inside; the sam
     assert.equal(sites.find((s) => s.file === "src/door/seal.ts" && s.line === 1)!.form, "import");
     assert.equal(sites.find((s) => s.file === "src/door/seal.ts" && s.line === 9)!.form, "re-export");
     assert.equal(sites.find((s) => s.file === "src/api/star.ts" && s.line === 1)!.form, "re-export");
+    assert.equal(sites.find((s) => s.file === "src/api/star-js.ts" && s.line === 1)!.form, "re-export", "a wildcard written with the .js specifier is a re-export site too");
   } finally {
     await fresh.close();
     rmSync(dir, { recursive: true, force: true });

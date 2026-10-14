@@ -5,7 +5,7 @@
  * through INTERFACE_SYNTAX, kept-answers.ts through KEPT_MODULES).
  */
 
-import { resolveSpecifier } from "../../adapters/typescript.ts";
+import { specifierCandidates } from "../../adapters/typescript.ts";
 import type { InterfaceSyntax } from "./component-interfaces.ts";
 
 /** A TypeScript import or export list: `import { a as b } from`, `export { a as b }`, `export type { … }`. */
@@ -21,32 +21,17 @@ export const TYPESCRIPT_INTERFACES: InterfaceSyntax = {
   serverBounds: false,
   importLists: (text) => [...text.matchAll(TS_LIST)].map((m) => m[1]!),
   defaultNames: (text) => [...text.matchAll(TS_DEFAULT_NAME)].map((m) => m[1]!),
-  // No .js spelling: the word index looks a wildcard up by a declaration's file, which is always source (isSourceFile), never JavaScript.
+  // Every file the specifier may name: without the file list, `./foo.js` is foo.ts in a NodeNext project and foo.js in a JavaScript one.
   wildcardModules(file, text) {
-    const modules: string[] = [];
-    for (const [, specifier] of text.matchAll(TS_WILDCARD)) {
-      const target = resolveSpecifier(file, specifier!);
-      if (target === undefined) continue;
-      const stripped = target.replace(/\.(ts|tsx|mts|cts)$/, "");
-      modules.push(target, `${stripped}.ts`, `${stripped}.tsx`, `${stripped}.mts`, `${stripped}.cts`, `${stripped}/index.ts`);
-    }
-    return modules;
+    return [...text.matchAll(TS_WILDCARD)].flatMap(([, specifier]) => specifierCandidates(file, specifier!));
   },
 };
 
 /**
  * The module files a changed file wildcard re-exports, in every spelling a
- * kept answer can name them by. Unlike wildcardModules it adds the .js
- * spelling: a kept answer's module is its definition's file as the server
- * reports it, which can be JavaScript (KEPT_EXTENSIONS in kept-answers.ts).
+ * kept answer can name them by: a kept answer's module is its definition's
+ * file as the server reports it, which can be JavaScript.
  */
 export function typescriptKeptModules(file: string, text: string): string[] {
-  const modules: string[] = [];
-  for (const [, specifier] of text.matchAll(TS_WILDCARD)) {
-    const target = resolveSpecifier(file, specifier!);
-    if (target === undefined) continue;
-    const stripped = target.replace(/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/, "");
-    modules.push(target, `${stripped}.ts`, `${stripped}.tsx`, `${stripped}.mts`, `${stripped}.cts`, `${stripped}.js`, `${stripped}/index.ts`);
-  }
-  return modules;
+  return [...text.matchAll(TS_WILDCARD)].flatMap(([, specifier]) => specifierCandidates(file, specifier!));
 }
