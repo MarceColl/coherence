@@ -1,6 +1,6 @@
 {
   "name": "coherence",
-  "version": "1.7.2",
+  "version": "1.8.0",
   "description": "Coherence's hooks through one warm process per session, with its verdicts where the user reads them",
   "author": { "name": "PostHog" },
   "types": "./types/index.d.ts"
