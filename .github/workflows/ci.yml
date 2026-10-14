@@ -49,9 +49,16 @@ jobs:
       - name: Install
         run: npm ci
 
-      # The language servers the adapters ask: neither is a dependency of the package, so an adopter brings its own.
-      - name: Language servers
-        run: npm install --global typescript-language-server@5.1.3 typescript@5.9.2 pyright@1.1.413
+      # The language servers the adapters ask, and quint, which quint props and conformance replay run: none is a dependency of the package, so an adopter brings its own.
+      - name: Language servers and quint
+        run: npm install --global typescript-language-server@5.1.3 typescript@5.9.2 pyright@1.1.413 @informalsystems/quint@0.33.0
+
+      # Quint downloads its Rust evaluator to ~/.quint on first use.
+      - name: Quint evaluator cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.quint
+          key: quint-0.33.0-${{ runner.os }}
 
       # The Python test runner and tach, into .venv, where the tests look for them.
       - name: Python test tools
@@ -94,9 +101,16 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: node .github/scripts/records-summary.mjs "$BASE" "$HEAD" >> "$GITHUB_STEP_SUMMARY"
 
-      # The language servers the adapters ask: neither is a dependency of the package, so an adopter brings its own.
-      - name: Language servers
-        run: npm install --global typescript-language-server@5.1.3 typescript@5.9.2 pyright@1.1.413
+      # The language servers the adapters ask, and quint, which quint props and conformance replay run: none is a dependency of the package, so an adopter brings its own.
+      - name: Language servers and quint
+        run: npm install --global typescript-language-server@5.1.3 typescript@5.9.2 pyright@1.1.413 @informalsystems/quint@0.33.0
+
+      # Quint downloads its Rust evaluator to ~/.quint on first use.
+      - name: Quint evaluator cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.quint
+          key: quint-0.33.0-${{ runner.os }}
 
       # The Python test runner and tach, into .venv, where the tests look for them.
       - name: Python test tools

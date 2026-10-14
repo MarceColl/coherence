@@ -1,7 +1,7 @@
 # Journal
 
 Compression: one append-only file per session of attributed, durable outcomes, read back as one timeline.
-model: planned — the work-order lifecycle
+model: Journal.qnt
 
 ## invariants
 - a citation reaches another branch: A --cite of a record another branch has committed is accepted and printed with that branch, journal <id> shows such a record as it stands there and says where, and a citation of it names its branch; an id found neither in the stores nor on any branch is still refused.
