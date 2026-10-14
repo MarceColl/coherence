@@ -57,6 +57,7 @@ import { QUERY_USAGE, queryCommand } from "./readings/query/cli.ts";
 import { SCOPE_USAGE, scopeCommand } from "./readings/scope/cli.ts";
 import { scopeApp } from "./readings/scope/live.ts";
 import { SCAFFOLD_USAGE, scaffoldCommand } from "./scaffold/cli.ts";
+import { CONFORM_USAGE, conformCommand } from "./conformance/cli.ts";
 import { SPEC_USAGE, specCommand } from "./spec/cli.ts";
 import { nestedFolder, repositoryTop } from "./adapters/project-files.ts";
 import { keepAttributes, keepIgnore } from "./lifecycle/state-files.ts";
@@ -81,6 +82,7 @@ ${LEXICON_WORK_USAGE}
 ${SPEC_USAGE}
 ${SCAFFOLD_USAGE}
 ${ENFORCEMENT_USAGE}
+${CONFORM_USAGE}
 ${ECONOMY_USAGE}
 ${QUERY_USAGE}
 ${SCOPE_USAGE}
@@ -465,6 +467,8 @@ async function main(argv: string[]): Promise<number> {
       return runCommand(rest, io);
     case "refute":
       return refuteCommand(rest, io);
+    case "conform":
+      return conformCommand(rest, io);
     case "warm":
       // Internal: the hook starts this detached so the instrument is loaded before the stop that needs it.
       await warmInstrument(root);

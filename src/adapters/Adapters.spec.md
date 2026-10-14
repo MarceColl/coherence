@@ -1,6 +1,7 @@
 # Adapters
 
 The language adapter seam: how to ask a language's server for definitions, references, visibility, a test filter, and a synthetic refutation.
+model: none — it drives external language servers, whose behavior is theirs; the chokepoint ladder grades it against the real servers
 
 ## invariants
 - name forms: A spec value reads as a bare symbol, a symbol in its file, or a module path that stays under the project root, and prose never resolves; one function decides the form.

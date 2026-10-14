@@ -39,18 +39,33 @@ export const ATTRIBUTES_FILE = join(STATE_DIR, ".gitattributes");
 export const IGNORE_TEXT = [
   "# Written by coherence hooks install; hooks uninstall removes it.",
   "# Commit this file, .gitattributes and the folders it keeps: the journal,",
-  "# runs and work orders are durable records, and hooks holds the project's",
-  "# own hook voice. Everything else here is regenerated (feed cursors, read",
-  "# traces, practice firings, the warm server, structure and lexicon",
-  "# readings), so git ignores it.",
+  "# runs, work orders and conformance verdicts are durable records, and hooks",
+  "# holds the project's own hook voice. Everything else here is regenerated",
+  "# (feed cursors, read traces, practice firings, the warm server, structure",
+  "# and lexicon readings, conformance captures), so git ignores it.",
   "/*",
   "!/.gitignore",
   "!/.gitattributes",
   ...DURABLE_FOLDERS.map((folder) => `!/${folder}/`),
 ].join("\n") + "\n";
 
-/** What releases through 1.6.0 wrote, which ignored the attributes file; a file holding exactly one of these is brought up to IGNORE_TEXT. */
+/** What earlier releases wrote: 1.7.2's, before the conformance store, and through 1.6.0's, which ignored the attributes file; a file holding exactly one of these is brought up to IGNORE_TEXT. */
 export const EARLIER_IGNORE_TEXTS: readonly string[] = [
+  [
+    "# Written by coherence hooks install; hooks uninstall removes it.",
+    "# Commit this file, .gitattributes and the folders it keeps: the journal,",
+    "# runs and work orders are durable records, and hooks holds the project's",
+    "# own hook voice. Everything else here is regenerated (feed cursors, read",
+    "# traces, practice firings, the warm server, structure and lexicon",
+    "# readings), so git ignores it.",
+    "/*",
+    "!/.gitignore",
+    "!/.gitattributes",
+    "!/journal/",
+    "!/runs/",
+    "!/work/",
+    "!/hooks/",
+  ].join("\n") + "\n",
   [
     "# Written by coherence hooks install; hooks uninstall removes it.",
     "# Commit this file and the folders it keeps: the journal, runs and work",
@@ -79,14 +94,31 @@ export const ATTRIBUTES_TEXT = [
   ...ATTRIBUTE_LINES,
 ].join("\n") + "\n";
 
+/** What earlier releases wrote where no attributes file was: 1.7.2's, before the conformance store; a file holding exactly one of these is Coherence's and is brought up to ATTRIBUTES_TEXT. */
+export const EARLIER_ATTRIBUTES_TEXTS: readonly string[] = [
+  [
+    "# Written by Coherence; hooks uninstall removes it while it holds only this.",
+    "# Each record store is one append-only JSONL file per session, and its",
+    "# readers order records by content: two branches that appended to one",
+    "# session's file merge with both sides' lines (merge=union), never a",
+    "# conflict. GitHub folds the records in a pull request's diff.",
+    "journal/*.jsonl merge=union",
+    "journal/** linguist-generated=true",
+    "runs/*.jsonl merge=union",
+    "runs/** linguist-generated=true",
+    "work/*.jsonl merge=union",
+    "work/** linguist-generated=true",
+  ].join("\n") + "\n",
+];
+
 /** The line above what Coherence adds to an attributes file the adopter already had. */
 const ADDED_HEAD = "# Added by Coherence: its record stores merge with both sides' lines.";
 
 /** What was done with .coherence/.gitignore: written, already Coherence's text, an earlier release's text brought up to it, the adopter's kept, or absent and left so. */
 export type IgnoreAction = "wrote" | "unchanged" | "upgraded" | "kept" | "absent";
 
-/** What was done with .coherence/.gitattributes: written, already exactly Coherence's, the adopter's with Coherence's missing lines added, or the adopter's already setting them all. */
-export type AttributesAction = "wrote" | "unchanged" | "added" | "kept";
+/** What was done with .coherence/.gitattributes: written, already exactly Coherence's, an earlier release's text brought up to it, the adopter's with Coherence's missing lines added, or the adopter's already setting them all. */
+export type AttributesAction = "wrote" | "unchanged" | "upgraded" | "added" | "kept";
 
 function readText(path: string): string | undefined {
   try {
@@ -135,6 +167,10 @@ export function keepAttributes(root: string): AttributesAction {
     write(path, ATTRIBUTES_TEXT);
     return "wrote";
   }
+  if (EARLIER_ATTRIBUTES_TEXTS.includes(found)) {
+    write(path, ATTRIBUTES_TEXT);
+    return "upgraded";
+  }
   const missing = ATTRIBUTE_LINES.filter((line) => !sets(found, line));
   if (missing.length === 0) return "kept";
   write(path, `${found}${found === "" || found.endsWith("\n") ? "" : "\n"}${[ADDED_HEAD, ...missing].join("\n")}\n`);
@@ -151,9 +187,10 @@ export function keepStateFiles(root: string): void {
   }
 }
 
-/** Remove each file that holds exactly what Coherence writes (the ignore file in this or an earlier release's text); whether the ignore file went. */
+/** Remove each file that holds exactly what Coherence writes, in this or an earlier release's text; whether the ignore file went. */
 export function removeStateFiles(root: string): boolean {
-  if (readText(resolve(root, ATTRIBUTES_FILE)) === ATTRIBUTES_TEXT) rmSync(resolve(root, ATTRIBUTES_FILE));
+  const attributes = readText(resolve(root, ATTRIBUTES_FILE));
+  if (attributes === ATTRIBUTES_TEXT || (attributes !== undefined && EARLIER_ATTRIBUTES_TEXTS.includes(attributes))) rmSync(resolve(root, ATTRIBUTES_FILE));
   const ignore = readText(resolve(root, IGNORE_FILE));
   if (ignore === undefined || (ignore !== IGNORE_TEXT && !EARLIER_IGNORE_TEXTS.includes(ignore))) return false;
   rmSync(resolve(root, IGNORE_FILE));

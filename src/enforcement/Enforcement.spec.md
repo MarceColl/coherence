@@ -1,6 +1,7 @@
 # Enforcement
 
 Enforcement by detection: the chokepoint check with its grade ladder and automatic refutation, the totality oracle pass, the run as the primary record, and the warm server, with its authenticated socket and its guarded HTTP for the live Scope reading.
+model: planned — refutation witnessing (recorded, then witnessed by a later pass) and the warm server's lock and idle lifecycle
 
 ## invariants
 - run appended never rewritten: A run is appended as one line and never rewritten; the latest verdict per enforcement is a view derived from every run, and a skipped enforcement keeps its prior dated verdict.
@@ -315,4 +316,18 @@ Enforcement by detection: the chokepoint check with its grade ladder and automat
   via: run refuses an --invariant that names no bullet, running nothing, and takes a bullet by its component folder and name too
   because: a name that matched no bullet was dropped without a word, so a run of nine names whose fifth was mistyped ran eight, reported them passing and exited 0, and a refutation confirmed through it would read as witnessed for a bullet it never ran (df-5c88f106)
   refuted: let run go on without the names that match no bullet, as before -> "run refuses an --invariant that names no bullet, running nothing, and takes a bullet by its component folder and name too" went red in each.test.ts; restored (cmp), green batched and alone (2026-10-12)
+  kinds: none
+- a quint prop passes only when every quint step answered: A via: quint prop <property> is checked by quint typecheck, quint run and quint verify against the spec's quint model, never run as a test title; it passes only when every step answered ok, grades simulated only when the config turns verify off, a step that could not start or did not finish leaves it not run, and a violation or a refusal fails it.
+  over: every quint prop the run checks, under each outcome a quint step can give: ok, a violation, a refusal, quint absent, a model checker with no Java, and verify off
+  via: a quint prop passes only when every quint step answered: verify unavailable or quint absent is not run, a violation or a refusal fails, and only verify off grades simulated
+  because: a property checked by a tool that never ran reads as proved; quint verify needs Java and Apalache, which a machine may lack, and simulation samples where the model checker proves, so a missing step must say so and the weaker grade must be chosen in the config, never fallen into
+  crossing: instrument -> record
+  refuted: made settle in quint-prop.ts read an unavailable quint step as ok -> "a quint prop passes only when every quint step answered" went red in src/enforcement/quint-prop.test.ts; restored (cmp), green batched and alone (2026-10-14)
+  kinds: none
+- a quint prop needs a current, agreeing conformance verdict: With conformance.required in the config, a quint prop passes only when its model's conformance verdict for the code and the model as they are now agrees; one that disagrees fails it, and a stale or absent one leaves it not run.
+  over: every quint prop under conformance.required, with its model's standing agreeing, disagreeing, stale and absent, and without the requirement
+  via: with conformance required, a quint prop needs its model's latest conformance verdict to agree and be current
+  because: a property proved of a model says nothing of the code until conformance replay has held the model against it; a model nobody checked against the code could pass every property and describe nothing that runs
+  crossing: instrument -> record
+  refuted: made a quint prop ignore conformance.required -> "with conformance required, a quint prop needs its model's latest conformance verdict to agree and be current" went red in src/enforcement/quint-prop.test.ts; restored (cmp), green batched and alone (2026-10-14)
   kinds: none

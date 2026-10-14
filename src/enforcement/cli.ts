@@ -1,7 +1,7 @@
 /**
  * The enforcement commands:
  *
- *   node src/cli.ts run [--session <id>] [--agent <name>] [--form chokepoint|totality-oracle] [--invariant <name>]... [--no-server] [--observe] [--each] [--json]
+ *   node src/cli.ts run [--session <id>] [--agent <name>] [--form chokepoint|totality-oracle] [--quint] [--invariant <name>]... [--no-server] [--observe] [--each] [--json]
  *   node src/cli.ts run --each                 after the batched pass, each totality oracle's test in its own invocation, appended as a second run
  *   node src/cli.ts run --status [--json]     the latest verdict per enforcement, derived from every run
  *   node src/cli.ts refute <component>/<name> --broke "<what you changed>"
@@ -34,7 +34,8 @@ import { formatObservationSummary } from "../observation/observed.ts";
 export const REFUTE_USAGE = '  refute <component>/<name> --broke "<what you changed>" [--session <id>] [--agent <name>] [--timeout <seconds>]   run the bullet\'s totality oracle with the break staged; it must fail, and a detector that does not finish in time (default 600 s) refutes nothing';
 
 export const ENFORCEMENT_USAGE = [
-  "  run [--session <id>] [--agent <name>] [--form chokepoint|totality-oracle] [--invariant <name>]... [--no-server] [--observe] [--each] [--json]",
+  "  run [--session <id>] [--agent <name>] [--form chokepoint|totality-oracle] [--quint] [--invariant <name>]... [--no-server] [--observe] [--each] [--json]",
+  "  run --quint              only the quint props: each via: quint prop <property>, checked by quint typecheck, quint run and quint verify against the spec's model",
   "  run --status [--json]   the latest verdict per enforcement, derived from every run",
   "  run at a registry's top runs each listed project from its own folder, one after another; --json is an array of each project's",
   "  run --each               after the batched pass, run each totality oracle's test in its own invocation (the config's test command), append those verdicts as a second run, and name any that passed batched but fail alone",
@@ -71,6 +72,11 @@ export function formatRun(outcome: RunOutcome): string {
           lines.push(`    references: ${counts.inside} inside, ${counts.test} test${exempt}, ${counts.bypass} bypass`);
           lines.push(`    refutation ${e.refutation}: ${c.refutationAccount}`);
         }
+      } else if (e.quintProp !== undefined) {
+        const steps = Object.entries(e.quintSteps ?? {}).map(([step, s]) => `${step} ${s.outcome}`).join(", ");
+        lines.push(`  quint prop ${e.quintProp}${e.quintGrade === undefined ? "" : ` (${e.quintGrade})`}: ${e.verdict} (${ms(e.latency)}; ${steps === "" ? "no quint step ran" : steps}); refutation ${e.refutation}${e.conformance === undefined || e.conformance === "absent" ? "" : `; conformance ${e.conformance}`}`);
+        lines.push(`    ${e.reason}`);
+        if (e.counterexample !== undefined) for (const line of e.counterexample.split("\n").slice(0, 20)) lines.push(`    | ${line}`);
       } else {
         const t = detail.totality;
         lines.push(`  totality oracle: ${e.verdict} (${ms(e.latency)}${e.mode === "batched" ? ", one invocation for every test the bullets name" : e.mode === "one-at-a-time" ? ", its own invocation" : ""}); refutation ${e.refutation}`);
@@ -134,7 +140,7 @@ export function formatStatus(root: string, model: SpecModel): string {
         const form: Form = enforcement.form;
         const key = `${component.folder} ${invariant.name} ${form}`;
         const entry = latest.get(key);
-        const what = enforcement.form === "chokepoint" ? `chokepoint ${enforcement.chokepoint}` : `totality oracle "${enforcement.via}"`;
+        const what = enforcement.form === "chokepoint" ? `chokepoint ${enforcement.chokepoint}` : enforcement.quintProp !== undefined ? `quint prop ${enforcement.quintProp}` : `totality oracle "${enforcement.via}"`;
         let text = verdictText(entry);
         if (entry !== undefined && !inLatest.has(key)) text += ` — kept from the run at ${entry.at}; the latest run skipped it`;
         if (entry?.verdict === "fail") defects += 1;
@@ -187,7 +193,7 @@ async function registryRun(registry: Registry, argv: string[], io: Io, json: boo
 export async function runCommand(argv: string[], io: Io): Promise<number> {
   let parsed;
   try {
-    parsed = parseFlags(argv, { session: "one", agent: "one", form: "one", invariant: "many", "no-server": "switch", json: "switch", status: "switch", observe: "switch", each: "switch" });
+    parsed = parseFlags(argv, { session: "one", agent: "one", form: "one", invariant: "many", "no-server": "switch", json: "switch", status: "switch", observe: "switch", each: "switch", quint: "switch" });
   } catch (error) {
     if (error instanceof JournalError) {
       io.err(`run: ${error.message}\n${ENFORCEMENT_USAGE}`);
@@ -234,13 +240,18 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   try {
     const observe = parsed.switches.has("observe");
     const each = parsed.switches.has("each");
+    const quint = parsed.switches.has("quint");
+    if (quint && form === "chokepoint") {
+      io.err("run: --quint checks quint props, which are totality oracles; --form chokepoint runs none");
+      return 64;
+    }
     if (each && form === "chokepoint") {
       io.err("run: --each confirms totality oracles one at a time; --form chokepoint runs none");
       return 64;
     }
     let outcome: Awaited<ReturnType<typeof performRun>>;
     try {
-      outcome = await performRun(root, { session, agent, form, invariants, adapter: direct, adapters, server: directs.length === 0, observe, each });
+      outcome = await performRun(root, { session, agent, form, invariants, adapter: direct, adapters, server: directs.length === 0, observe, each, quint });
     } catch (error) {
       if (!(error instanceof UnknownInvariants)) throw error;
       io.err(error.message);

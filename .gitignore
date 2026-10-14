@@ -5,7 +5,7 @@ dist/
 
 # .coherence/ holds two different kinds of thing and they need opposite treatment.
 # The record folders below are durable and cumulative: the journal's records, the
-# verification runs, and the work orders. A fresh clone that started empty would
+# verification runs, the work orders, and the conformance verdicts. A fresh clone that started empty would
 # have lost them. Everything else under .coherence is transient (the warm server's
 # socket, feed cursors, read traces) and is regenerated on demand, except the
 # attributes file every session start keeps, which merges the records by union.
@@ -14,6 +14,7 @@ dist/
 !.coherence/journal/
 !.coherence/runs/
 !.coherence/work/
+!.coherence/conformance/
 
 # agent worktrees
 .claude/worktrees/

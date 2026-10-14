@@ -258,6 +258,8 @@ class LiveReading implements HttpApp {
       base.journal = { ...base.journal, work: { kind: "present", orders, damaged: loaded.damaged } };
       const changed = orders.filter((order) => fresh.has(order.id) || order.history.some((h) => fresh.has(h.id)));
       if (changed.length > 0) this.send("work", { orders: changed, damaged: loaded.damaged });
+    } else if (store === "conformance") {
+      // Scope shows no conformance verdict yet: a verdict appended changes nothing it renders. A quint prop's run carries the verdict it read.
     } else if (store === "model") {
       const state = await scopeState({ ...this.build, window: false, componentInterfaces: this.interfaces });
       this.base = state;

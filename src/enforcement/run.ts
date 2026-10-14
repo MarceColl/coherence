@@ -31,6 +31,8 @@ import { connectAdapter, type RemoteAdapter } from "./server.ts";
 import { escapeRegExp, runTotalityBatch, runTotalityOracle, type TotalityResult } from "./totality.ts";
 import { readLatency, type LatencyReading } from "./latency.ts";
 import { createObserver, recordObservation, type ObservationOutcome, type TotalityVia } from "../observation/index.ts";
+import { checkQuintProp, type StandingOf } from "./quint-prop.ts";
+import { conformanceStanding } from "../conformance/standing.ts";
 
 export interface RunOptions {
   session: string;
@@ -68,6 +70,10 @@ export interface RunOptions {
    * config's `test` command, and append those verdicts as a second run record (every entry mode one-at-a-time).
    */
   each?: boolean | undefined;
+  /** Only quint props: the totality oracles whose detector is quint, never a test and never a chokepoint. */
+  quint?: boolean | undefined;
+  /** How a quint prop learns its model's conformance verdict; by default, from the conformance store. */
+  standing?: StandingOf | undefined;
 }
 
 /** The per-test confirmation `run --each` adds: the second record, and the totality oracles it caught. */
@@ -118,8 +124,8 @@ function chokepointEnforcements(invariant: Pick<ModelInvariant, "enforcements">)
   return invariant.enforcements.flatMap((e) => (e.form === "chokepoint" ? [{ protects: e.protects, chokepoint: e.chokepoint, from: e.from }] : []));
 }
 
-function totalityEnforcements(invariant: ModelInvariant): { over: string; via: string }[] {
-  return invariant.enforcements.flatMap((e) => (e.form === "totality oracle" ? [{ over: e.over, via: e.via }] : []));
+function totalityEnforcements(invariant: ModelInvariant): { over: string; via: string; quintProp: string | undefined }[] {
+  return invariant.enforcements.flatMap((e) => (e.form === "totality oracle" ? [{ over: e.over, via: e.via, quintProp: e.quintProp }] : []));
 }
 
 /** Whether a chokepoint invariant may involve a file: its latest run touched it, or the file's text carries one of its names. */
@@ -295,7 +301,7 @@ export async function performRun(root: string, options: RunOptions): Promise<Run
   const load = machineLoad();
   const model = options.model ?? loadSpecModel(root);
   const config = readEnforcementConfig(root);
-  const wantChokepoints = options.form === undefined || options.form === "chokepoint";
+  const wantChokepoints = options.quint !== true && (options.form === undefined || options.form === "chokepoint");
   const wantTotality = options.form === undefined || options.form === "totality oracle";
   const chosen = new Set(options.invariants ?? []);
   const multi = config.languages.length > 1;
@@ -304,8 +310,12 @@ export async function performRun(root: string, options: RunOptions): Promise<Run
   const unmatched = [...chosen].filter((wanted) => !model.components.some((c) => c.invariants.some((i) => wanted === i.name || wanted === `${c.folder}/${i.name}`)));
   if (unmatched.length > 0) throw new UnknownInvariants(unmatched);
 
+  const quintOnly = options.quint === true;
   const selected = model.components.flatMap((c) =>
-    c.invariants.filter((i) => (chosen.size === 0 || isChosen(c.folder, i.name)) && i.enforcements.length > 0).map((i) => ({ component: c.folder, invariant: i })),
+    c.invariants
+      .filter((i) => (chosen.size === 0 || isChosen(c.folder, i.name)) && i.enforcements.length > 0)
+      .filter((i) => !quintOnly || totalityEnforcements(i).some((e) => e.quintProp !== undefined))
+      .map((i) => ({ component: c.folder, invariant: i })),
   );
 
   const details: EntryDetail[] = [];
@@ -336,7 +346,8 @@ export async function performRun(root: string, options: RunOptions): Promise<Run
   const observing = options.observe === true && wantTotality && config.testJson !== undefined ? createObserver(root, config) : undefined;
   // An observed pass reads through the primary language's instrument after it, so that one is reached first and kept awake.
   if (observing !== undefined) await instruments.open(config.language);
-  const allVias = selected.flatMap(({ component, invariant }) => totalityEnforcements(invariant).map(({ via }) => ({ component, name: invariant.name, filter: primary?.testFilter(via) ?? via, setup: chooseSetup(via) })));
+  // A quint prop is no test: quint answers it below, and the batched runner never sees it.
+  const allVias = quintOnly ? [] : selected.flatMap(({ component, invariant }) => totalityEnforcements(invariant).filter((e) => e.quintProp === undefined).map(({ via }) => ({ component, name: invariant.name, filter: primary?.testFilter(via) ?? via, setup: chooseSetup(via) })));
   const vias: TotalityVia[] = allVias.filter((v) => v.setup === 0).map(({ component, name, filter }) => ({ component, name, filter }));
   if (wantTotality) {
     // The test suite can outlast a warm server's idle timeout, and its timer only resets on a request line.
@@ -458,8 +469,34 @@ export async function performRun(root: string, options: RunOptions): Promise<Run
       }
     }
     if (wantTotality) {
-      for (const { via } of totalityEnforcements(invariant)) {
+      for (const { via, quintProp } of totalityEnforcements(invariant)) {
         const t0 = Date.now();
+        if (quintProp !== undefined) {
+          const modelFile = model.components.find((c) => c.folder === component)?.model?.path;
+          const result = await checkQuintProp(root, component, modelFile, quintProp, options.standing ?? conformanceStanding);
+          details.push({
+            entry: {
+              ...entryOf(component, invariant.name, "totality oracle", {
+                verdict: result.verdict,
+                grade: undefined,
+                refutation: recorded.has(entryKey(component, invariant.name, "totality oracle")) ? "witnessed" : "missing",
+                bypasses: [],
+                testReferences: 0,
+                files: modelFile === undefined ? [] : [modelFile],
+                latency: Date.now() - t0,
+                reason: result.reason,
+              }),
+              quintProp,
+              ...(result.grade === undefined || result.verdict !== "pass" ? {} : { quintGrade: result.grade }),
+              quintSteps: result.steps,
+              conformance: result.conformance,
+              ...(result.counterexample === undefined ? {} : { counterexample: result.counterexample }),
+            },
+            totality: result,
+          });
+          continue;
+        }
+        if (quintOnly) continue;
         const filter = primary?.testFilter(via) ?? via;
         const index = chooseSetup(via);
         const setup = config.tests[index]!;
@@ -507,7 +544,7 @@ export async function performRun(root: string, options: RunOptions): Promise<Run
     load,
     ...(batched.size === 0 ? {} : { batch: { ms: totalBatch } }),
     // A full run: every bullet, both forms, from the project's own model, and graded.
-    ...(chosen.size === 0 && options.form === undefined && options.model === undefined && options.grade !== false ? { full: true as const } : {}),
+    ...(chosen.size === 0 && options.form === undefined && options.quint !== true && options.model === undefined && options.grade !== false ? { full: true as const } : {}),
     invariants: details.map((d) => d.entry),
   };
   if (options.grade === false) for (const entry of record.invariants) entry.ungraded = true;

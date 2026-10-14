@@ -16,6 +16,13 @@
  * A create, move or close may cite earlier records with --cite, checked as
  * every journal citation is; a decision id written into a because stays
  * text, and --cite is how it becomes a citation a reader can follow.
+ *
+ * Each verb reports to conformance replay at its own sites (Journal.qnt is
+ * the model they are held against): after a write, the action with the
+ * order's state or owner as the store now folds it, its conformance fact;
+ * before a refusal the model also makes, the same action marked rejected.
+ * The client is inert outside a capture, and each fact is read only when a
+ * collector listens.
  */
 
 import { loadRuns, type RunRecord } from "../enforcement/record.ts";
@@ -24,6 +31,7 @@ import { GLYPH, MOVE_STATES, alternation, spoken, anySubjectOf, citedBy, citesOf
 import { loadJournal } from "./store.ts";
 import { CITE, attribution, citations, head, vetted, withCommon, type Context, type Written } from "./verbs.ts";
 import { WORK_DIR, appendWork, isTerminal, loadOrders, type WorkOrder } from "./work.ts";
+import { log, tracing } from "../conformance/coherence-trace.ts";
 
 /** What a work verb prints on success; the first line starts with the record id. */
 export interface WorkWritten {
@@ -56,6 +64,7 @@ function create(argv: string[], ctx: Context): WorkWritten {
   const owner = parsed.one.get("owner-session") ?? who.session;
   const record: WorkOrderRecord = { ...head("order", who, ctx, objective), objective, success, boundary, owner, ...citations(parsed, ctx.cwd) };
   writeWork(ctx, record);
+  if (tracing()) log("work.create", { id: record.id, owner, state_after: loadOrders(ctx.cwd).find((o) => o.id === record.id)?.state ?? "none" }, { scopes: ["journal.work"] });
   return {
     lines: [
       `${record.id}  work order recorded in ${WORK_DIR}/${record.session}.jsonl; owner ${owner}; state open`,
@@ -71,14 +80,18 @@ function move(argv: string[], ctx: Context): WorkWritten {
   const [id, state, ...rest] = parsed.positionals;
   if (id === undefined || state === undefined) throw new JournalError("work move takes <id> <state>");
   if (rest.length > 0) throw new JournalError(`work move: unexpected argument "${rest[0]}"`);
+  if (!isWorkState(state) || state === "completed") log("work.move", { id, target: state }, { scopes: ["journal.work"], rejected: true });
   if (!isWorkState(state)) throw new JournalError(`work move: "${state}" is not ${spoken(MOVE_STATES)}`);
   if (state === "completed") throw new JournalError(`work move: completed is what close records; run: work close ${id} --because "<what was done>"`);
   const because = required(parsed, "because", "a move records why the order moved");
+  if (tracing() && !loadOrders(ctx.cwd).some((o) => o.id === id)) log("work.move", { id, target: state }, { scopes: ["journal.work"], rejected: true });
   const order = orderOrRefuse(ctx.cwd, id, "move");
+  if (isTerminal(order.state) || order.state === state) log("work.move", { id, target: state }, { scopes: ["journal.work"], rejected: true });
   refuseTerminal(order, "move");
   if (order.state === state) throw new JournalError(`work move: ${id} is already ${state}`);
   const record: WorkMove = { ...head("move", who, ctx, `${id}\n${state}\n${because}`), of: id, state, because, ...citations(parsed, ctx.cwd) };
   writeWork(ctx, record);
+  if (tracing()) log("work.move", { id, target: state, state_after: loadOrders(ctx.cwd).find((o) => o.id === id)?.state ?? "none" }, { scopes: ["journal.work"] });
   return { lines: [`${record.id}  ${id} ${order.state} -> ${state} recorded in ${WORK_DIR}/${record.session}.jsonl`, ...citeLines(record)] };
 }
 
@@ -87,10 +100,13 @@ function close(argv: string[], ctx: Context): WorkWritten {
   const who = attribution(parsed);
   const id = onePositional(parsed, "work order id");
   const because = required(parsed, "because", "a close records what was done against the success criterion");
+  if (tracing() && !loadOrders(ctx.cwd).some((o) => o.id === id)) log("work.close", { id }, { scopes: ["journal.work"], rejected: true });
   const order = orderOrRefuse(ctx.cwd, id, "close");
+  if (isTerminal(order.state)) log("work.close", { id }, { scopes: ["journal.work"], rejected: true });
   refuseTerminal(order, "close");
   const record: WorkCompletion = { ...head("completion", who, ctx, `${id}\n${because}`), of: id, state: "completed", because, ...citations(parsed, ctx.cwd) };
   writeWork(ctx, record);
+  if (tracing()) log("work.close", { id, state_after: loadOrders(ctx.cwd).find((o) => o.id === id)?.state ?? "none" }, { scopes: ["journal.work"] });
   return { lines: [`${record.id}  ${id} ${order.state} -> completed recorded in ${WORK_DIR}/${record.session}.jsonl`, ...citeLines(record)] };
 }
 
@@ -100,11 +116,14 @@ function owner(argv: string[], ctx: Context): WorkWritten {
   const id = onePositional(parsed, "work order id");
   const next = required(parsed, "owner-session", "the session that owns the order from here");
   const because = required(parsed, "because", "an owner change records why");
+  if (tracing() && !loadOrders(ctx.cwd).some((o) => o.id === id)) log("work.owner", { id, next_owner: next }, { scopes: ["journal.work"], rejected: true });
   const order = orderOrRefuse(ctx.cwd, id, "owner");
+  if (isTerminal(order.state) || order.owner === next) log("work.owner", { id, next_owner: next }, { scopes: ["journal.work"], rejected: true });
   refuseTerminal(order, "owner");
   if (order.owner === next) throw new JournalError(`work owner: ${id} is already owned by ${next}`);
   const record: WorkOwner = { ...head("owner", who, ctx, `${id}\n${next}\n${because}`), of: id, owner: next, because };
   writeWork(ctx, record);
+  if (tracing()) log("work.owner", { id, next_owner: next, owner_after: loadOrders(ctx.cwd).find((o) => o.id === id)?.owner ?? "" }, { scopes: ["journal.work"] });
   return { lines: [`${record.id}  ${id} owner ${order.owner} -> ${next} recorded in ${WORK_DIR}/${record.session}.jsonl`] };
 }
 

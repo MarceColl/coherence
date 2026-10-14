@@ -1,9 +1,9 @@
 # Coherence checks itself on every pull request and every push to main: the
 # typecheck, the unit tests (in two shards), the lexicon and spec checks (what
-# npm test runs), and a
-# chokepoint run over Coherence's own invariants. A test proves code behaves;
-# only the chokepoint run proves no code reaches around a declared door, and
-# without it a bypass reached main with every test green (df-5961bdb2).
+# npm test runs), a chokepoint run over Coherence's own invariants, and
+# conformance replay of its quint models. A test proves code behaves; only the
+# chokepoint run proves no code reaches around a declared door, and without it
+# a bypass reached main with every test green (df-5961bdb2).
 name: CI
 
 on:
@@ -49,9 +49,28 @@ jobs:
       - name: Install
         run: npm ci
 
-      # The language servers the adapters ask: neither is a dependency of the package, so an adopter brings its own.
-      - name: Language servers
-        run: npm install --global typescript-language-server@5.1.3 typescript@5.9.2 pyright@1.1.413
+      # The language servers the adapters ask, and quint, which quint props and conformance replay run: none is a dependency of the package, so an adopter brings its own.
+      - name: Language servers and quint
+        run: npm install --global typescript-language-server@5.1.3 typescript@5.9.2 pyright@1.1.413 @informalsystems/quint@0.33.0
+
+      # Quint downloads its Rust evaluator to ~/.quint on first use.
+      - name: Quint evaluator cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.quint
+          key: quint-0.33.0-${{ runner.os }}
+
+      # Quint's download is not safe to run twice at once: the tests start quint in parallel, and on a cold cache they race to write the same archive. One run first fetches it.
+      - name: Quint evaluator download
+        run: |
+          cat > "$RUNNER_TEMP/warm.qnt" <<'QNT'
+          module warm {
+            var n: int
+            action init = n' = 0
+            action step = n' = n + 1
+          }
+          QNT
+          quint run "$RUNNER_TEMP/warm.qnt" --max-samples 1 --max-steps 1
 
       # The Python test runner and tach, into .venv, where the tests look for them.
       - name: Python test tools
@@ -94,9 +113,28 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: node .github/scripts/records-summary.mjs "$BASE" "$HEAD" >> "$GITHUB_STEP_SUMMARY"
 
-      # The language servers the adapters ask: neither is a dependency of the package, so an adopter brings its own.
-      - name: Language servers
-        run: npm install --global typescript-language-server@5.1.3 typescript@5.9.2 pyright@1.1.413
+      # The language servers the adapters ask, and quint, which quint props and conformance replay run: none is a dependency of the package, so an adopter brings its own.
+      - name: Language servers and quint
+        run: npm install --global typescript-language-server@5.1.3 typescript@5.9.2 pyright@1.1.413 @informalsystems/quint@0.33.0
+
+      # Quint downloads its Rust evaluator to ~/.quint on first use.
+      - name: Quint evaluator cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.quint
+          key: quint-0.33.0-${{ runner.os }}
+
+      # Quint's download is not safe to run twice at once: the tests start quint in parallel, and on a cold cache they race to write the same archive. One run first fetches it.
+      - name: Quint evaluator download
+        run: |
+          cat > "$RUNNER_TEMP/warm.qnt" <<'QNT'
+          module warm {
+            var n: int
+            action init = n' = 0
+            action step = n' = n + 1
+          }
+          QNT
+          quint run "$RUNNER_TEMP/warm.qnt" --max-samples 1 --max-steps 1
 
       # The Python test runner and tach, into .venv, where the tests look for them.
       - name: Python test tools
@@ -114,6 +152,10 @@ jobs:
       # Every chokepoint graded in-process (no warm server); a broken one fails the run.
       - name: Chokepoints
         run: node --disable-warning=ExperimentalWarning src/cli.ts run --form chokepoint --no-server --session "ci-${{ github.run_id }}" --agent ci
+
+      # Each quint model held against the code's own tests: the Journal's work orders captured under a collector and replayed; a disagreement fails the run.
+      - name: Conformance
+        run: node --disable-warning=ExperimentalWarning src/cli.ts conform --session "ci-${{ github.run_id }}" --agent ci
 
   # One check that stands for the rest: green only when every shard and the checks are.
   verify:

@@ -1,6 +1,7 @@
 # Economy
 
 The context closure of a change, the read traces that record what sessions actually loaded, calibrate over the two with an automatic outcome label, and mass: total and unreached, unreached first.
+model: none — a reading computed from recorded history: a function of what was recorded, with no state of its own that changes
 
 ## invariants
 - reach by either enforcement: Unreached mass counts a file reached when an invariant's chokepoint or its totality oracle reaches it, and says plainly which totality oracles could not be asked.

@@ -124,6 +124,46 @@ after the record finds the same totality oracle passing again — red with the b
 without it. The bullet's `refuted:` line stays as the human account and may
 name the record; the account alone never satisfies the requirement.
 
+## Quint properties
+
+A totality oracle's detector may be quint instead of a test. Its `via:`
+names one property of the spec's quint model (the file on its `model:` line,
+see [spec.md](spec.md#the-model-line)):
+
+```markdown
+- an ended order never moves: A completed or cancelled work order stays in the state it ended in.
+  over: every state the work-order model reaches from an empty journal
+  via: quint prop terminalNeverMoves
+```
+
+`run` never hands it to the test runner. It asks quint, through
+`src/conformance/quint.ts` and from a scratch folder, three steps in order:
+
+1. `quint typecheck` the model: a refusal fails the bullet.
+2. `quint run --invariant <property>`, the simulation, within the config's
+   `quint.maxSamples` and `quint.maxSteps`: a state that breaks the property
+   fails the bullet, and the run prints the states quint found.
+3. `quint verify --invariant <property>`, the bounded model check, within
+   `quint.verifySteps`: a violation fails the bullet.
+
+The prop passes `verified` when all three answer ok. It passes `simulated`
+only when the config sets `quint.verify` to `off`, so the weaker grade is a
+choice, never something fallen into. A step that could not start (no quint
+installed, no Java for the model checker) or did not finish in
+`quint.timeoutSeconds` leaves the prop not run, never passing, and the reason
+says what to install, or to set `quint.verify` off to accept simulation
+only. `run --quint` checks only the quint props.
+
+A quint prop is a totality oracle, so `refute` refutes it as any other: stage
+a break in the model or in the code it describes, run `refute`, and the
+bullet must go red; restore, and a later `run` witnesses it.
+
+A property of a model says nothing of the code until the model has been
+held against the code. With `conformance.required` in the config, a quint
+prop passes only when its model's latest conformance verdict agrees and is
+current: a disagreeing one fails it, and a stale or absent one leaves it not
+run until `conform` runs (see [conformance.md](conformance.md)).
+
 ## Python
 
 Python enforces no visibility, so its ladder has four rungs, each a fact

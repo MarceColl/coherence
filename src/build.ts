@@ -16,6 +16,7 @@ import { createRequire, stripTypeScriptTypes } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserSources, strippedName } from "./readings/scope/build.ts";
+import { VENDORED_FILES } from "./conformance/vendor.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const src = join(root, "src");
@@ -49,3 +50,5 @@ for (const name of await browserSources()) {
   const source = readFileSync(join(src, scope, name), "utf8");
   writeFileSync(join(dist, scope, strippedName(name)), stripTypeScriptTypes(source, { mode: "strip" }));
 }
+// The conformance trace client, as text: scaffold client vendors these bytes into a project, so the package ships them unchanged.
+for (const name of VENDORED_FILES) copy(join(src, "conformance", name), join(dist, "conformance", "vendor", name));

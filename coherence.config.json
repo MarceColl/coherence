@@ -4,6 +4,24 @@
   "ignore": ["node_modules", "promo", "src/readings/scope/fonts"],
   "language": "typescript",
   "wellKnown": ["Mnemion", "Sol"],
+  "models": true,
+  "quint": { "seed": "0x2a" },
+  "conformance": {
+    "testCommand": ["node", "--disable-warning=ExperimentalWarning", "--test", "--test-concurrency=1", "src/journal/journal.test.ts"],
+    "client": "src/conformance",
+    "required": true,
+    "models": {
+      "src/journal": {
+        "scopes": ["journal.work"],
+        "names": { "work.create": ["create"], "work.move": ["move"], "work.close": ["close"], "work.owner": ["owner"] },
+        "acknowledged": [
+          { "guard": "create#1", "because": "work create mints a fresh random id for every order, so no caller can ask for an id that exists" },
+          { "guard": "create#2", "because": "the owner is --owner-session or the writing session, and the argument parser refuses either empty" },
+          { "guard": "owner#4", "because": "--owner-session is required, and the argument parser refuses it empty" }
+        ]
+      }
+    }
+  },
   "test": "node --disable-warning=ExperimentalWarning --import=./src/enforcement/leak-guard.ts --test --test-concurrency=1 --test-name-pattern={filter} 'src/**/*.test.ts'",
   "testMatch": "# pass [1-9][0-9]*",
   "testJson": [

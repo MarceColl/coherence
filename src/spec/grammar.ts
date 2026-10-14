@@ -6,6 +6,7 @@
  *
  *   One-line intent.
  *   owners: <who owns it, comma separated>       optional; declared, never routed on
+ *   model: <file>.qnt | none — <why> | planned — <what>   the quint model beside the spec, or why there is none
  *
  *   ## trust levels            (entry spec only)
  *   - owner-trusted: full kernel access
@@ -24,7 +25,7 @@
  *     chokepoint: <symbol>
  *     from: anywhere | outside the component | outside <folder>   optional; which references the chokepoint governs
  *     over: <the set the detector is total over>   totality oracle form, with
- *     via: <the test>
+ *     via: <the test> | quint prop <property>      a test's title, or a property of the spec's quint model
  *     because: <why it exists, what it protects against>
  *     crossing: <trust level> -> <trust level>
  *     entrances: <entrance, entrance> | none   optional; the entrances whose work it checks, by name, never by crossing alone
@@ -170,7 +171,17 @@ export function fromText(from: ChokepointFrom): string {
 
 export type Enforcement =
   | { form: "chokepoint"; protects: string; chokepoint: string; line: number; from?: ChokepointFrom }
-  | { form: "totality oracle"; over: string; via: string; line: number };
+  | {
+      form: "totality oracle";
+      over: string;
+      via: string;
+      line: number;
+      /** Set when the via: reads quint prop <property>: the detector is quint, checking that property of the spec's model, never a test. */
+      quintProp?: string;
+    };
+
+/** A via: that names a property of the spec's quint model rather than a test: quint prop <property>. */
+export const QUINT_PROP = /^quint\s+prop\b\s*(.*)$/;
 
 export interface Refutation {
   broke: string;
@@ -219,12 +230,31 @@ export interface Invariant {
   unfilled: string[];
 }
 
+/**
+ * A spec's model: line. A file names the quint model that describes the
+ * component (a .qnt file beside the spec, or under it); none says why a model
+ * does not make sense here; planned says what a model would describe, so
+ * "not built yet" never reads as "makes no sense".
+ */
+export type ModelLine =
+  | { kind: "file"; file: string; line: number }
+  | { kind: "none"; reason: string; line: number }
+  | { kind: "planned"; what: string; line: number };
+
+/** How the model: line is written, for the problems that name it. */
+export const MODEL_LINE_FORM = "model: <file>.qnt, model: none — <why a model makes no sense here>, or model: planned — <what it will model>";
+
+/** The none and planned values of a model: line, each with its text after a dash (an em dash, or - or --). */
+const MODEL_WORD = /^(none|planned)(?:\s*(?:—|–|--?)\s*(.*))?$/s;
+
 export interface ParsedSpec {
   file: string;
   title: string | undefined;
   intent: string | undefined;
   /** Who owns the component, as an owners: line in the header declares; absent when it declares none. Declared, never routed on. */
   owners?: string[] | undefined;
+  /** The spec's model: line; absent when it has none. */
+  model?: ModelLine | undefined;
   /** Undefined when the spec has no trust levels section. */
   trustLevels: TrustLevel[] | undefined;
   trustLevelsLine: number | undefined;
@@ -292,6 +322,8 @@ export function parseSpec(text: string, file: string, options: ParseOptions = {}
   let intent: string | undefined;
   let owners: string[] | undefined;
   let ownersLine: number | undefined;
+  let model: ModelLine | undefined;
+  let modelLine: number | undefined;
   let trustLevels: TrustLevel[] | undefined;
   let trustLevelsLine: number | undefined;
   let entrancesSeen = false;
@@ -390,6 +422,32 @@ export function parseSpec(text: string, file: string, options: ParseOptions = {}
           const list = owned[1]!.split(",").map((owner) => owner.trim()).filter((owner) => owner !== "");
           if (list.length === 0) problem(line, "owners: names no owner; list them comma separated, or leave the line out");
           else if (!list.some(isPlaceholder)) owners = list;
+          return;
+        }
+        // The other header line that is not prose: the component's quint model, or why there is none.
+        const modelled = /^model:\s*(.*)$/.exec(raw.trim());
+        if (modelled !== null) {
+          closeParagraph();
+          if (modelLine !== undefined) problem(line, `model: given twice; one model: line reads ${MODEL_LINE_FORM}`);
+          modelLine = line;
+          const value = modelled[1]!.trim();
+          if (value === "") {
+            problem(line, `model: names nothing; it reads ${MODEL_LINE_FORM}`);
+            return;
+          }
+          if (isPlaceholder(value)) return;
+          const word = MODEL_WORD.exec(value);
+          if (word !== null) {
+            const text = (word[2] ?? "").trim();
+            if (text === "" || isPlaceholder(text)) problem(line, `model: ${word[1]} needs ${word[1] === "none" ? "the reason a model makes no sense here" : "what the model will describe"}: ${MODEL_LINE_FORM}`);
+            else model = word[1] === "none" ? { kind: "none", reason: text, line } : { kind: "planned", what: text, line };
+            return;
+          }
+          if (!/^[^\s]+\.qnt$/.test(value)) {
+            problem(line, `model: ${value} is neither a .qnt file nor none or planned with its reason; it reads ${MODEL_LINE_FORM}`);
+            return;
+          }
+          model = { kind: "file", file: value, line };
           return;
         }
         if (paragraph.length === 0) paragraphLine = line;
@@ -544,7 +602,7 @@ export function parseSpec(text: string, file: string, options: ParseOptions = {}
     }
   }
   const invariants = bullets.map((bullet) => buildInvariant(bullet, problem, options.seed));
-  return { file, title, intent, ...(owners === undefined ? {} : { owners }), trustLevels, trustLevelsLine, entrances, invariants, problems };
+  return { file, title, intent, ...(owners === undefined ? {} : { owners }), ...(model === undefined ? {} : { model }), trustLevels, trustLevelsLine, entrances, invariants, problems };
 }
 
 function buildInvariant(bullet: RawBullet, problem: (line: number, message: string) => void, seed: Seed | undefined): Invariant {
@@ -600,7 +658,19 @@ function buildInvariant(bullet: RawBullet, problem: (line: number, message: stri
     if (x !== undefined && y !== undefined) enforcements.push(make(x, y, fa.line));
   };
   pair("protects", "chokepoint", (protects, chokepoint, line) => ({ form: "chokepoint", protects, chokepoint, line }), "the chokepoint form");
-  pair("over", "via", (over, via, line) => ({ form: "totality oracle", over, via, line }), "the totality oracle form");
+  pair(
+    "over",
+    "via",
+    (over, via, line) => {
+      // A quint prop names one property of the spec's model, an identifier; anything else after quint prop is refused, never run as a test title.
+      const prop = QUINT_PROP.exec(via);
+      if (prop === null) return { form: "totality oracle", over, via, line };
+      const property = prop[1]!.trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(property)) problem(single.get("via")!.line, `via: quint prop on ${bullet.name} names one property of the spec's quint model, an identifier; "${property}" is not one`);
+      return { form: "totality oracle", over, via, line, quintProp: property };
+    },
+    "the totality oracle form",
+  );
 
   // Which references the chokepoint governs: a from: line belongs to the chokepoint form and nothing else.
   const fromField = single.get("from");

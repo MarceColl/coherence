@@ -31,6 +31,7 @@
  * --write independently appends the bullet to the component's spec.
  */
 
+import { DEFAULT_VENDOR_DIR, vendorClient } from "../conformance/vendor.ts";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
@@ -63,6 +64,7 @@ export const SCAFFOLD_USAGE = [
   "  scaffold control --baseline --session <id> --agent <name>   record the entrances with no traced control at adoption, so orient names only new ones",
   '  scaffold practice <componentFolder> "<name>" "<sentence>" [--when "<trigger>"] [--write]   a practice bullet with every slot to fill; --write appends it to the practice file beside the spec',
   "  scaffold entrances [<folder or file>]   the ## entrances bullets for the detected entrances no spec declares, by the component that owns each; printed, never written",
+  `  scaffold client [--dir <folder>] [--write | --check]   the conformance trace client and its node:test hooks, vendored byte for byte (default folder ${DEFAULT_VENDOR_DIR}); --write never overwrites, --check exits 1 on drift`,
   IMPORT_USAGE,
 ].join("\n");
 
@@ -370,6 +372,17 @@ function practiceVerb(argv: string[], io: Io): void {
 }
 
 /** Synchronous shapes return a number; preview returns the rendering promise. */
+/** scaffold client: the trace client vendored into the project, printed, written once, or checked for drift. */
+function clientVerb(argv: string[], io: Io): number {
+  const parsed = parseFlags(argv, { dir: "one", write: "switch", check: "switch" });
+  if (parsed.positionals.length > 0) usage(`scaffold client: unexpected argument "${parsed.positionals[0]}"`);
+  if (parsed.switches.has("write") && parsed.switches.has("check")) usage("scaffold client takes --write or --check, not both");
+  const mode = parsed.switches.has("write") ? "write" : parsed.switches.has("check") ? "check" : "print";
+  const { lines, exit } = vendorClient(io.cwd, parsed.one.get("dir") ?? DEFAULT_VENDOR_DIR, mode);
+  for (const line of lines) io.out(line);
+  return exit;
+}
+
 export function scaffoldCommand(argv: string[], io: Io): number | Promise<number> {
   const [shape, ...rest] = argv;
   try {
@@ -391,7 +404,8 @@ export function scaffoldCommand(argv: string[], io: Io): number | Promise<number
       return 0;
     }
     if (shape === "entrances") return entrancesVerb(rest, io).then(() => 0, (error: unknown) => scaffoldFailure(error, io));
-    usage('scaffold takes "component", "invariant", "practice", "control", "entrances" or "import"');
+    if (shape === "client") return clientVerb(rest, io);
+    usage('scaffold takes "component", "invariant", "practice", "control", "entrances", "client" or "import"');
   } catch (error) {
     return scaffoldFailure(error, io);
   }

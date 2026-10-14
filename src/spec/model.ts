@@ -17,7 +17,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { countWork, readProjectText, spawnSync } from "../lifecycle/work-meter.ts";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { isModuleHandler, parseSpec, type Entrance, type Invariant, type Problem, type TrustLevel } from "./grammar.ts";
+import { MODEL_LINE_FORM, isModuleHandler, parseSpec, type Entrance, type Invariant, type ModelLine, type Problem, type TrustLevel } from "./grammar.ts";
 import { applicableShapes, loadSeed, type Seed } from "./seed.ts";
 import { creditedByCrossingAlone, crossingChecksTrust, resolveCovered } from "./covers.ts";
 import { entryKey, latestByEnforcement, latestFor, loadRuns, parseLine as parseRunLine, witnessedRefutations, type Latest, type LoadedRuns, type RunRecord } from "../enforcement/record.ts";
@@ -32,6 +32,8 @@ import { kernelPractices, enactmentsIn, isCoherenceTree, journalRecords, modelPr
 
 export const SPEC_SUFFIX = ".spec.md";
 export const CONFIG_FILE = "coherence.config.json";
+/** The suffix of a quint model a spec names on its model: line. */
+export const QUINT_SUFFIX = ".qnt";
 
 /**
  * The project files the spec model finds by their names, each kind by the
@@ -39,7 +41,7 @@ export const CONFIG_FILE = "coherence.config.json";
  * through modelFileKind, and so does every watcher that refreshes what the
  * model drew, so a kind of file the model begins to read is watched with it.
  */
-export const MODEL_FILES = { spec: SPEC_SUFFIX, practice: PRACTICE_SUFFIX } as const;
+export const MODEL_FILES = { spec: SPEC_SUFFIX, practice: PRACTICE_SUFFIX, quint: QUINT_SUFFIX } as const;
 
 export type ModelFileKind = keyof typeof MODEL_FILES;
 
@@ -78,6 +80,8 @@ export interface Component {
   intent: string;
   /** Who owns it, as the spec's owners: line declares; absent when it declares none. Declared, never routed on. */
   owners?: string[];
+  /** The spec's model: line, with a named file resolved project-relative; absent when the spec has none. */
+  model?: ComponentModel;
   trustLevels: TrustLevel[] | undefined;
   /** Where work enters through this component, as its spec declares; each handler was found declared in the code. */
   entrances: ModelEntrance[];
@@ -89,6 +93,9 @@ export interface Component {
   parent: string | undefined;
   children: string[];
 }
+
+/** A component's model: line as the model reads it: a named file carries its project-relative path, set only when the file exists. */
+export type ComponentModel = ModelLine & { path?: string };
 
 export interface ModelEntrance extends Entrance {
   /** The folder of the component whose spec declares it. */
@@ -126,6 +133,8 @@ export interface SpecModel {
   defects?: DefectFloor;
   /** The entrances an invariant covered by its crossing alone and no longer does, until it names them (covers.ts); advisory, never a problem. Absent when none. */
   crossingAlone?: CrossingAloneCredit[];
+  /** Specs with no model: line in a project that has begun naming models but does not require them (config models unset); advisory, never a problem. Absent when none. */
+  unmodelled?: Problem[];
   /** A project lexicon's stored project field that disagrees with the config's name; advisory, never a problem: the config's name is the one read, and an earlier release wrote the stored one. Absent when they agree. */
   storedName?: Problem;
 }
@@ -133,17 +142,40 @@ export interface SpecModel {
 interface Config {
   ignore: string[];
   entryDir: string;
+  /** Whether every spec must carry a model: line (the config's models key); a project that never set it is never asked. */
+  models: boolean;
 }
 
 function readConfig(root: string): Config {
-  const config: Config = { ignore: [], entryDir: "." };
+  const config: Config = { ignore: [], entryDir: ".", models: false };
   // The project's own config over its registry's keys (project-config.ts); a malformed file is refused with its path.
   const found = effectiveConfig(root);
   if (found === undefined) return config;
   const record = found.record;
   if (Array.isArray(record["ignore"])) config.ignore = record["ignore"].filter((v): v is string => typeof v === "string");
   if (typeof record["entryDir"] === "string") config.entryDir = record["entryDir"];
+  config.models = modelsRequired(record["models"]);
   return config;
+}
+
+/** The config's models key read: true, or an object whose required is true, asks every spec for its model: line. */
+export function modelsRequired(value: unknown): boolean {
+  if (value === true) return true;
+  return typeof value === "object" && value !== null && (value as Record<string, unknown>)["required"] === true;
+}
+
+/**
+ * A model: line's file, resolved: beside the spec (the component's folder),
+ * confined to the project; a path that climbs out, or a file that does not
+ * exist, is the reason. The file is the model the component's quint props
+ * and conformance replay read.
+ */
+export function resolveModelFile(root: string, folder: string, file: string): string | { reason: string } {
+  const rel = (folder === "." ? file : `${folder}/${file}`).replace(/^\.\//, "");
+  if (file.startsWith("/") || rel.split("/").includes("..")) return { reason: `model: ${file} climbs out of the component; name a .qnt file beside the spec or under its folder` };
+  const at = resolve(root, rel);
+  if (!existsSync(at) || !statSync(at).isFile()) return { reason: `model: ${file} does not exist beside the spec (read at ${rel}); write the model, or say ${MODEL_LINE_FORM.replace(/^model: <file>\.qnt, /, "")}` };
+  return rel;
 }
 
 /**
@@ -442,6 +474,24 @@ export function loadSpecModel(rootGiven: string, options: LoadOptions = {}): Spe
       }
       return { ...entrance, component: folder, file: found };
     });
+    // The model: line: a named file must exist beside the spec; with models required, a spec must carry the line.
+    let model: ComponentModel | undefined = parsed.model;
+    if (model?.kind === "file") {
+      const found = resolveModelFile(root, folder, model.file);
+      if (typeof found === "string") model = { ...model, path: found };
+      else problems.push({ file: specPath, line: model.line, message: found.reason });
+    } else if (model === undefined && config.models) {
+      problems.push({ file: specPath, line: 1, message: `no model: line; the config's models key asks every spec to name its quint model or say why not: ${MODEL_LINE_FORM}` });
+    }
+    // A quint prop checks a property of the spec's own model, so the spec must name one.
+    if (model?.kind !== "file") {
+      for (const invariant of parsed.invariants) {
+        for (const enforcement of invariant.enforcements) {
+          if (enforcement.form !== "totality oracle" || enforcement.quintProp === undefined) continue;
+          problems.push({ file: specPath, line: enforcement.line, message: `${invariant.name}: a quint prop checks a property of the spec's quint model, and this spec names none; add model: <file>.qnt` });
+        }
+      }
+    }
     const paired = practiceFiles.get(folder);
     const practices = (paired?.parsed.practices ?? []).map((practice) => modelPractice(practice, `${folder}/${practice.name}`, folder, paired!.file, enactments));
     components.push({
@@ -450,6 +500,7 @@ export function loadSpecModel(rootGiven: string, options: LoadOptions = {}): Spe
       specPath,
       intent: parsed.intent ?? "",
       ...(parsed.owners === undefined ? {} : { owners: parsed.owners }),
+      ...(model === undefined ? {} : { model }),
       trustLevels: parsed.trustLevels,
       entrances,
       invariants,
@@ -486,7 +537,9 @@ export function loadSpecModel(rootGiven: string, options: LoadOptions = {}): Spe
   const journal = practiceFiles.size === 0 && components.length > 0 ? journalRecords(root) : records;
   const defects = defectFloor(defectStates(journal), guardStanding(components), declaredClasses(root), declaredFamilies(root));
   const crossingAlone = crossingAloneCredits(components, trustLevels);
-  return { root, entry: entry === undefined ? undefined : entryFolder, trustLevels, components, problems, counts, runs, defects, ...(crossingAlone.length === 0 ? {} : { crossingAlone }), ...(storedName === undefined ? {} : { storedName }) };
+  // A project that names a model somewhere but does not require the line hears which specs name none; one that names none hears nothing.
+  const unmodelled = config.models || !components.some((c) => c.model !== undefined) ? [] : components.filter((c) => c.model === undefined).map((c) => ({ file: c.specPath, line: 1, message: `names no model; add ${MODEL_LINE_FORM}` }));
+  return { root, entry: entry === undefined ? undefined : entryFolder, trustLevels, components, problems, counts, runs, defects, ...(crossingAlone.length === 0 ? {} : { crossingAlone }), ...(unmodelled.length === 0 ? {} : { unmodelled }), ...(storedName === undefined ? {} : { storedName }) };
 }
 
 /** How a defect's guard stands in this model: the invariant <folder>/<name> is declared and its refutation witnessed, declared only, or missing. */

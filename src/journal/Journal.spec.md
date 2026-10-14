@@ -1,6 +1,7 @@
 # Journal
 
 Compression: one append-only file per session of attributed, durable outcomes, read back as one timeline.
+model: Journal.qnt
 
 ## invariants
 - a citation reaches another branch: A --cite of a record another branch has committed is accepted and printed with that branch, journal <id> shows such a record as it stands there and says where, and a citation of it names its branch; an id found neither in the stores nor on any branch is still refused.
@@ -260,4 +261,12 @@ Compression: one append-only file per session of attributed, durable outcomes, r
   via: every closed list the journal verbs take is read from the record model, and every help line, doc and definition that enumerates one names exactly its members
   because: the catches were written out in the record model, telemetry, the help twice, the docs twice, this spec and the lexicon; the step results in the union, the verb's own list, its template and refusals, the help, the docs and Scope's model; the work states work move takes in its help and refusal; and the id prefixes in a regular expression of their own, so a value added to one place would be refused, unsent, undocumented or never cited, and nothing would fail
   refuted: wrote the states work move takes out by hand again in its help, the literal open|active|waiting|cancelled in place of MOVE_STATES -> "every closed list the journal verbs take is read from the record model, and every help line, doc and definition that enumerates one names exactly its members" went red in vocabularies.test.ts on its own assertion; restored (cmp), green batched and alone (2026-10-12)
+  kinds: none
+- an ended order never moves: A completed or cancelled work order stays in the state it ended in: no move, close or owner change reaches it.
+  over: every state the work-order model reaches from an empty journal
+  via: quint prop terminalNeverMoves
+  because: an ended order that moved again would reopen work its owner closed and rebind runs to it; the verbs refuse it one by one, and the model states it once over every sequence of verbs
+  crossing: project-source -> record
+  refuted: dropped the isLive guard from move in Journal.qnt -> quint run found a state that breaks terminalNeverMoves; restored from HEAD, verified again (2026-10-14)
+  refuted: removed refuseTerminal from work move in workVerbs.ts under conformance.required -> conform disagreed (the test that moves a completed order failed and its trace was discarded) and the quint prop went red on it; restored (cmp), conform agreed again and the prop verified (2026-10-14)
   kinds: none

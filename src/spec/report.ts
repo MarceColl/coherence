@@ -13,7 +13,7 @@ import { defectFloorLines } from "../journal/defects.ts";
 export function verdictText(latest: Latest | undefined): string {
   if (latest === undefined) return "declared, unverified";
   const date = latest.at.slice(0, 10);
-  const grade = latest.grade === undefined ? "" : ` ${latest.grade}`;
+  const grade = latest.grade !== undefined ? ` ${latest.grade}` : latest.quintGrade !== undefined ? ` ${latest.quintGrade}` : "";
   switch (latest.verdict) {
     case "pass":
       return `verified ${date}${grade}`;
@@ -34,7 +34,8 @@ function invariantLines(invariant: ModelInvariant): string[] {
       const from = enforcement.from === undefined || enforcement.from === "anywhere" ? "" : ` from ${fromText(enforcement.from)}`;
       lines.push(`      chokepoint ${enforcement.chokepoint} protects ${enforcement.protects}${from}: ${verdictText(latest)}`);
     } else {
-      lines.push(`      totality oracle "${enforcement.via}" over ${enforcement.over}: ${verdictText(latest)}`);
+      const what = enforcement.quintProp === undefined ? `totality oracle "${enforcement.via}"` : `quint prop ${enforcement.quintProp}`;
+      lines.push(`      ${what} over ${enforcement.over}: ${verdictText(latest)}`);
     }
   }
   if (invariant.crossing !== undefined) lines.push(`      crossing ${invariant.crossing.from} -> ${invariant.crossing.to}`);
@@ -53,6 +54,7 @@ function invariantLines(invariant: ModelInvariant): string[] {
 function componentLines(component: Component): string[] {
   const lines: string[] = [`${component.name}  ${component.specPath}`];
   if (component.owners !== undefined) lines.push(`  owners: ${component.owners.join(", ")}`);
+  if (component.model !== undefined) lines.push(`  model: ${component.model.kind === "file" ? component.model.file : `${component.model.kind} — ${component.model.kind === "none" ? component.model.reason : component.model.what}`}`);
   if (component.trustLevels !== undefined) lines.push(`  trust levels: ${component.trustLevels.map((level) => level.name).join(", ")}`);
   if (component.invariants.length === 0) lines.push("  (no invariants)");
   for (const invariant of component.invariants) lines.push(...invariantLines(invariant));
@@ -91,6 +93,8 @@ export function formatReport(model: SpecModel): string {
   for (const problem of model.problems) lines.push(`PROBLEM  ${problem.file}:${problem.line}  ${problem.message}`);
   lines.push(formatCounts(model));
   lines.push(...crossingAloneLines(model.crossingAlone));
+  // Advisory: specs naming no model in a project that has begun naming them and does not require the line.
+  for (const spec of model.unmodelled ?? []) lines.push(`COVERAGE  ${spec.file}:${spec.line}  ${spec.message}`);
   // Advisory: a stored lexicon project that disagrees with the config's name, which is the one read.
   if (model.storedName !== undefined) lines.push(`NOTE  ${model.storedName.file}:${model.storedName.line}  ${model.storedName.message}`);
   // Advisory, after the counts: a close with neither a guard nor a decision, and each guard failure (defects.ts).

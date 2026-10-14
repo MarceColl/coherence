@@ -1,6 +1,7 @@
 # Coherence
 
 A prosthetic for proprioception: specs, invariants, and the readings that keep an agent session balanced.
+model: none — the entry spec declares trust levels and the crossings between them; it owns no state that changes
 
 ## trust levels
 - project-source: Agent-authored text: the adopter's code, specs, docs, and what an agent passes the command line. Never trusted about itself; every claim in it is checked against the code, never taken from it.
@@ -28,6 +29,9 @@ A prosthetic for proprioception: specs, invariants, and the readings that keep a
   trust: project-source
 - refute: an agent stages a break and records the totality oracle going red
   handler: refuteCommand in src/enforcement/cli.ts
+  trust: project-source
+- conform: an agent holds each quint model against the code's own tests: the tests captured under a collector, every trace replayed through the model, and a verdict appended
+  handler: conformCommand in src/conformance/cli.ts
   trust: project-source
 - serve: the warm language server for this project starts and holds the instrument open
   handler: serveCommand in src/enforcement/cli.ts

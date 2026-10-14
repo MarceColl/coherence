@@ -21,6 +21,38 @@ The owners are comma separated and declared, never routed on. The spec
 reading (`spec --check`), Scope's component card and `query component` show
 them. An empty `owners:` line or a second one is a problem.
 
+## The model line
+
+The header may also name the component's quint model, the executable
+description of its behavior as guarded actions over pure updates, or say why
+it has none:
+
+```markdown
+# Journal
+
+The journal: decisions, defects and work orders, appended and never edited.
+model: Journal.qnt
+```
+
+The line takes one of three values:
+
+- `model: <file>.qnt`: the model, beside the spec or under its folder. A file
+  that does not exist, or a path that climbs out of the component, is a
+  problem. A `via: quint prop <property>` bullet checks a property of it, and
+  `conform` replays the component's tests through it.
+- `model: none — <why>`: a model makes no sense here, and the reason says
+  why: a reading with no state, a function of its input with no state that changes.
+- `model: planned — <what>`: a model makes sense and is not written yet; the
+  text says what it will describe, so "not built" never reads as "makes no
+  sense".
+
+`none` or `planned` without its text, a value that is none of the three, an
+empty line or a second one is a problem. A project whose config sets
+`"models": true` asks every spec for the line, and a spec without one is a
+problem. Without it, a project that names a model anywhere hears which specs
+name none as a `COVERAGE` advisory, and a project that names none hears
+nothing.
+
 ## Entrances
 
 An entrance is where work enters the system from outside it: a command, a host
@@ -175,6 +207,13 @@ names the whole set the detector is total over and the test:
   kinds: storage
   checklist: scoped-reads dismissed: reads are the capability invariant's
 ```
+
+A totality oracle's detector may be quint instead of a test: `via: quint prop
+<property>` names one property of the spec's quint model, which quint
+simulates and model-checks over every state the model reaches (see
+[enforcement.md](enforcement.md#quint-properties)). The spec must name its
+model file on its `model:` line; a quint prop in a spec that names none, or
+one whose property is not an identifier, is a problem.
 
 ### Which references a chokepoint governs
 
