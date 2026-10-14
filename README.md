@@ -26,7 +26,7 @@ work itself.
 ## Quick setup: paste this into your agent
 
 ```text
-Install @posthog/coherence@^1.7 as a dev dependency (with pnpm, if minimumReleaseAge holds it back, add it to minimumReleaseAgeExclude) and run `npx --no -- coherence hooks install --host claude` (or `--host codex`).
+Install @posthog/coherence@latest as a dev dependency (with pnpm, if minimumReleaseAge holds it back, add it to minimumReleaseAgeExclude) and run `npx --no -- coherence hooks install --host claude` (or `--host codex`).
 Then run `npx --no -- coherence query practice "adopt Coherence"`, work through it, record it with `enact`, and tell me what each step found.
 Ask me whether pull requests should fail on Coherence's findings or get a report comment, then run `npx --no -- coherence ci install --host github --mode fail` (or `--mode comment`) with `--write`.
 ```
@@ -157,7 +157,7 @@ for you rather than the agent: the version running, the session's tool hook
 time against the budget, and the practices it owes.
 
 ```
-coherence 1.5.3 · hooks 0.4 s avg · 1 practice owed: close a defect
+coherence <version> · hooks 0.4 s avg · 1 practice owed: close a defect
 ```
 
 It reads only the session's own records, about 0.1 s a render. Add it to
@@ -292,9 +292,9 @@ It needs Node 22.18 or newer on macOS (Apple Silicon) or Linux.
 ```text
 Set up Coherence in this project, and report what each step found.
 
-1. Install. Run `npm install -D @posthog/coherence@^1.7` (or `pnpm add -D
-   @posthog/coherence@^1.7`); an older release lacks what the steps below
-   use. If pnpm's minimumReleaseAge refuses it or resolves an older one, add
+1. Install. Run `npm install -D @posthog/coherence@latest` (or `pnpm add -D
+   @posthog/coherence@latest`); the steps below use what the latest release
+   has. If pnpm's minimumReleaseAge refuses it or resolves an older one, add
    `@posthog/coherence` to `minimumReleaseAgeExclude` in pnpm-workspace.yaml
    (bun: `minimumReleaseAgeExcludes`; Yarn: `npmPreapprovedPackages`). Install
    the package itself, never a checkout. The command is
@@ -387,7 +387,7 @@ outside the component (`from: outside the component`), and its owners from
 Paste this into your agent to adopt one folder:
 
 ```text
-Adopt Coherence for <folder> only. Install @posthog/coherence@^1.7 as a dev dependency (with pnpm, if minimumReleaseAge holds it back, add it to minimumReleaseAgeExclude) and run `npx --no -- coherence hooks install --host claude --local` from <folder>.
+Adopt Coherence for <folder> only. Install @posthog/coherence@latest as a dev dependency (with pnpm, if minimumReleaseAge holds it back, add it to minimumReleaseAgeExclude) and run `npx --no -- coherence hooks install --host claude --local` from <folder>.
 Run `npx --no -- coherence adopt <folder>` from the repository root if this repository keeps a registry of adopted folders.
 Then run `npx --no -- coherence query practice "adopt Coherence"` from <folder>, work through it, record it with `enact`, and tell me what each step found.
 Ask me whether pull requests should fail on Coherence's findings or get a report comment, then run `npx --no -- coherence ci install --host github --mode fail` (or `--mode comment`) with `--write`.
