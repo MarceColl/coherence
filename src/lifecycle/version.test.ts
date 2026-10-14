@@ -246,12 +246,12 @@ test("--version, -v, version, --help, -h and help answer at the top level", asyn
   }
 });
 
-test("the README's setup asks for at least the current major.minor of Coherence, invoked through npx --no --", () => {
+test("the README's setup installs Coherence's latest release and names no version, invoked through npx --no --", () => {
   const readme = readFileSync(join(CHECKOUT, "README.md"), "utf8");
-  const [major, minor] = VERSION.split(".");
-  const floors = [...readme.matchAll(/@posthog\/coherence@\^(\d+\.\d+)\b/g)].map((m) => m[1]);
-  assert.ok(floors.length >= 2, "the quick and the full setup each carry a floor");
-  assert.deepEqual([...new Set(floors)], [`${major}.${minor}`], "every floor is package.json's major.minor");
+  const installs = [...readme.matchAll(/@posthog\/coherence@(\S+?)[`\s)]/g)].map((m) => m[1]);
+  assert.ok(installs.length >= 3, "the quick, full and monorepo setups each install it");
+  assert.deepEqual([...new Set(installs)], ["latest"], "every install asks for the latest release, never a version or a range that the next release leaves behind");
+  assert.doesNotMatch(readme, /\bcoherence \d+\.\d+(\.\d+)?\b/, "no example shows a version that goes stale");
   assert.doesNotMatch(readme, /npx --no coherence/, "npx eats a flag such as --version unless -- ends its own");
   assert.match(readme, /npx --no -- coherence/);
   assert.match(readme, /minimumReleaseAgeExclude/);
